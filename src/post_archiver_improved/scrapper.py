@@ -136,6 +136,7 @@ def download_image(image_url: str, post_id: str, output_dir: Path) -> Optional[s
 class YouTubeCommunityAPI:
     def __init__(self):
         self.base_url = "https://www.youtube.com/youtubei/v1/browse"
+        self.next_url = "https://www.youtube.com/youtubei/v1/next"
         self.headers = {
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -178,6 +179,14 @@ class YouTubeCommunityAPI:
             "continuation": continuation_token
         }
         return self._make_request(self.base_url, payload)
+    
+    def get_reply_continuation_data(self, continuation_token: str) -> Dict:
+        """Get next batch of replies using continuation token (uses next endpoint)."""
+        payload = {
+            "context": self.client_context,
+            "continuation": continuation_token
+        }
+        return self._make_request(self.next_url, payload)
     
     def get_post_detail_data(self, channel_id: str, post_id: str) -> Dict:
         """Get post detail data which includes comments."""
@@ -463,21 +472,56 @@ class CommentExtractor:
         author_url = f"https://www.youtube.com{canonical_url}" if canonical_url else ''
         
         author_thumbnail = comment_renderer.get('authorThumbnail', {}).get('thumbnails', [{}])[-1].get('url', '')
-        author_is_verified = any(
-            badge.get('metadataBadgeRenderer', {}).get('style', '') == 'BADGE_STYLE_TYPE_VERIFIED'
-            for badge in comment_renderer.get('authorBadges', [])
-        )
         
-        reply_count = comment_renderer.get('replyCount', '0')
-        if isinstance(reply_count, dict):
-            reply_count = reply_count.get('simpleText', '0')
+        author_is_verified = False
+        author_is_member = False
+        
+        author_badges = comment_renderer.get('authorBadges', [])
+        for badge in author_badges:
+            if 'metadataBadgeRenderer' in badge:
+                badge_style = badge['metadataBadgeRenderer'].get('style', '')
+                if 'BADGE_STYLE_TYPE_VERIFIED' in badge_style:
+                    author_is_verified = True
+                elif 'BADGE_STYLE_TYPE_MEMBER' in badge_style:
+                    author_is_member = True
+            elif 'liveChatAuthorBadgeRenderer' in badge:
+                badge_data = badge['liveChatAuthorBadgeRenderer']
+                if 'authorBadgeType' in badge_data:
+                    badge_type = badge_data['authorBadgeType']
+                    if 'VERIFIED' in badge_type:
+                        author_is_verified = True
+                    elif 'MEMBER' in badge_type:
+                        author_is_member = True
+        
+        reply_count = '0'
+        if 'replyCount' in comment_renderer:
+            reply_count_data = comment_renderer['replyCount']
+            if isinstance(reply_count_data, dict):
+                reply_count = reply_count_data.get('simpleText', '0')
+            else:
+                reply_count = str(reply_count_data)
+        
+        # Try alternative locations for reply count
+        if reply_count == '0':
+            action_buttons = comment_renderer.get('actionButtons', {})
+            if 'commentActionButtonsRenderer' in action_buttons:
+                buttons_renderer = action_buttons['commentActionButtonsRenderer']
+                if 'replyButton' in buttons_renderer:
+                    reply_button = buttons_renderer['replyButton']
+                    if 'buttonRenderer' in reply_button:
+                        button_text = reply_button['buttonRenderer'].get('text', {})
+                        if 'simpleText' in button_text:
+                            text = button_text['simpleText']
+                            match = re.search(r'(\d+)', text)
+                            if match:
+                                reply_count = match.group(1)
         
         author_data = {
             'id': author_id,
             'name': author_text,
             'thumbnail': author_thumbnail,
             'is_verified': author_is_verified,
-            'is_member': False,
+            'is_member': author_is_member,
             'url': author_url,
             'is_favorited': 'creatorHeart' in comment_renderer.get('actionButtons', {}),
             'is_pinned': 'pinnedCommentBadge' in comment_renderer,
@@ -631,12 +675,17 @@ class CommentExtractor:
     def _extract_replies_from_renderer(self, replies_renderer: Dict, parent_comment: Dict, max_replies: int = 200):
         """Extract replies from commentRepliesRenderer and add them to parent comment."""
         try:
+            initial_reply_count = len(parent_comment['replies'])
+            
+            # Extract immediate replies first
             if 'contents' in replies_renderer:
                 for reply_item in replies_renderer['contents']:
                     if 'commentRenderer' in reply_item:
                         reply = self.extract_comment_from_renderer(reply_item['commentRenderer'])
                         if reply and len(parent_comment['replies']) < max_replies:
                             parent_comment['replies'].append(reply)
+            
+            replies_extracted = len(parent_comment['replies']) - initial_reply_count
             
             # Try to fetch additional replies if continuation token exists
             continuation_token = self._get_reply_continuation_token(replies_renderer)
@@ -645,24 +694,66 @@ class CommentExtractor:
                 parent_comment['replies'].extend(additional_replies[:max_replies - len(parent_comment['replies'])])
                 
         except Exception as e:
-            # Log error but don't break the entire process (hopefully)
-            print(f"Error extracting replies for comment {parent_comment.get('id', 'unknown')}: {e}")
+            # Log error but don't break the entire process
+            pass
     
     def _get_reply_continuation_token(self, replies_renderer: Dict) -> Optional[str]:
         """Get continuation token for fetching more replies."""
-        # Check in continuations array
+        # First check in continuations array (most common location)
         if 'continuations' in replies_renderer:
             for continuation in replies_renderer['continuations']:
                 if 'nextContinuationData' in continuation:
-                    return continuation['nextContinuationData'].get('continuation', '')
+                    token = continuation['nextContinuationData'].get('continuation', '')
+                    if token:
+                        return token
+                elif 'buttonRenderer' in continuation:
+                    # Sometimes the continuation is in a "Show more replies" button
+                    button = continuation['buttonRenderer']
+                    if 'command' in button and 'continuationCommand' in button['command']:
+                        token = button['command']['continuationCommand'].get('token', '')
+                        if token:
+                            return token
         
-        # Also check in contents for continuationItemRenderer
+        # Check in contents for continuationItemRenderer
         if 'contents' in replies_renderer:
             for item in replies_renderer['contents']:
                 if 'continuationItemRenderer' in item:
                     continuation_endpoint = item['continuationItemRenderer'].get('continuationEndpoint', {})
                     if 'continuationCommand' in continuation_endpoint:
-                        return continuation_endpoint['continuationCommand'].get('token', '')
+                        token = continuation_endpoint['continuationCommand'].get('token', '')
+                        if token:
+                            return token
+                    elif 'commandExecutorCommand' in continuation_endpoint:
+                        # Alternative format
+                        commands = continuation_endpoint['commandExecutorCommand'].get('commands', [])
+                        for command in commands:
+                            if 'continuationCommand' in command:
+                                token = command['continuationCommand'].get('token', '')
+                                if token:
+                                    return token
+        
+        # Check in viewReplies button
+        if 'viewReplies' in replies_renderer:
+            view_replies = replies_renderer['viewReplies']
+            if 'buttonRenderer' in view_replies:
+                button = view_replies['buttonRenderer']
+                if 'command' in button and 'continuationCommand' in button['command']:
+                    token = button['command']['continuationCommand'].get('token', '')
+                    if token:
+                        return token
+        
+        # Check in header for "View replies" button  
+        if 'header' in replies_renderer:
+            header = replies_renderer['header']
+            if 'commentsHeaderRenderer' in header:
+                header_renderer = header['commentsHeaderRenderer']
+                if 'viewRepliesText' in header_renderer:
+                    view_replies_runs = header_renderer['viewRepliesText'].get('runs', [])
+                    for run in view_replies_runs:
+                        if 'navigationEndpoint' in run and 'continuationCommand' in run['navigationEndpoint']:
+                            token = run['navigationEndpoint']['continuationCommand'].get('token', '')
+                            if token:
+                                return token
         
         return None
     
@@ -670,19 +761,34 @@ class CommentExtractor:
         """Fetch replies using a continuation token."""
         replies = []
         current_token = continuation_token
+        fetch_attempts = 0
+        max_attempts = 10  # Prevent infinite loops
         
         try:
-            while current_token and len(replies) < max_replies:
-                response = self.api.get_continuation_data(current_token)
-                batch_replies = self._extract_replies_from_response(response)
-                replies.extend(batch_replies)
+            while current_token and len(replies) < max_replies and fetch_attempts < max_attempts:
+                fetch_attempts += 1
                 
-                current_token = self._find_continuation_token(response)
-                if not batch_replies or len(replies) >= max_replies:
+                # Use the reply-specific endpoint for better results
+                response = self.api.get_reply_continuation_data(current_token)
+                batch_replies = self._extract_replies_from_response(response)
+                
+                if not batch_replies:
+                    # If no replies found, try the regular continuation endpoint as fallback
+                    response = self.api.get_continuation_data(current_token)
+                    batch_replies = self._extract_replies_from_response(response)
+                
+                if batch_replies:
+                    replies.extend(batch_replies)
+                
+                # Look for next continuation token
+                current_token = self._find_reply_continuation_token_in_response(response)
+                
+                # Break if no more replies or no continuation token
+                if not batch_replies or not current_token:
                     break
                     
         except Exception as e:
-            print(f"Error fetching replies from continuation: {e}")
+            pass
         
         return replies[:max_replies]
     
@@ -690,6 +796,7 @@ class CommentExtractor:
         """Extract replies from a continuation response."""
         replies = []
         
+        # Handle standard continuation response
         if 'onResponseReceivedEndpoints' in response:
             for endpoint in response['onResponseReceivedEndpoints']:
                 items = []
@@ -722,7 +829,86 @@ class CommentExtractor:
                     if reply:
                         replies.append(reply)
         
+        # Handle next endpoint specific format
+        if 'contents' in response:
+            contents = response['contents']
+            if 'singleColumnWatchNextResults' in contents:
+                results = contents['singleColumnWatchNextResults']['results']['results']['contents']
+                for item in results:
+                    if 'itemSectionRenderer' in item:
+                        section_contents = item['itemSectionRenderer'].get('contents', [])
+                        for section_item in section_contents:
+                            if 'continuationItemRenderer' in section_item:
+                                continue  # Skip continuation items
+                            elif 'commentRenderer' in section_item:
+                                reply = self.extract_comment_from_renderer(section_item['commentRenderer'])
+                                if reply:
+                                    replies.append(reply)
+        
         return replies
+    
+    def _find_reply_continuation_token_in_response(self, response: Dict) -> Optional[str]:
+        """Find the next continuation token specifically for replies in a response."""
+        # Check standard locations first
+        if 'onResponseReceivedEndpoints' in response:
+            for endpoint in response['onResponseReceivedEndpoints']:
+                items = []
+                if 'reloadContinuationItemsCommand' in endpoint:
+                    items = endpoint['reloadContinuationItemsCommand'].get('continuationItems', [])
+                elif 'appendContinuationItemsAction' in endpoint:
+                    items = endpoint['appendContinuationItemsAction'].get('continuationItems', [])
+                
+                for item in items:
+                    if 'continuationItemRenderer' in item:
+                        continuation_renderer = item['continuationItemRenderer']
+                        
+                        # Check for direct continuation endpoint
+                        continuation_endpoint = continuation_renderer.get('continuationEndpoint', {})
+                        if 'continuationCommand' in continuation_endpoint:
+                            token = continuation_endpoint['continuationCommand'].get('token', '')
+                            if token:
+                                return token
+                        
+                        # Check for button-based continuation (e.g., "Show more replies" button)
+                        if 'button' in continuation_renderer:
+                            button = continuation_renderer['button']
+                            if 'buttonRenderer' in button:
+                                button_renderer = button['buttonRenderer']
+                                # Check button text to confirm it's a "Show more" button
+                                button_text = button_renderer.get('text', {}).get('runs', [{}])[0].get('text', '')
+                                if 'more' in button_text.lower() or 'replies' in button_text.lower():
+                                    command = button_renderer.get('command', {})
+                                    if 'continuationCommand' in command:
+                                        token = command['continuationCommand'].get('token', '')
+                                        if token:
+                                            return token
+        
+        # Check in next endpoint format
+        if 'contents' in response:
+            contents = response['contents']
+            if 'singleColumnWatchNextResults' in contents:
+                results = contents['singleColumnWatchNextResults']['results']['results']['contents']
+                for item in results:
+                    if 'itemSectionRenderer' in item:
+                        section_contents = item['itemSectionRenderer'].get('contents', [])
+                        for section_item in section_contents:
+                            if 'continuationItemRenderer' in section_item:
+                                continuation_endpoint = section_item['continuationItemRenderer'].get('continuationEndpoint', {})
+                                if 'continuationCommand' in continuation_endpoint:
+                                    return continuation_endpoint['continuationCommand'].get('token', '')
+        
+        # Check in continuation data
+        if 'continuationContents' in response:
+            continuation_contents = response['continuationContents']
+            if 'commentRepliesContinuation' in continuation_contents:
+                replies_continuation = continuation_contents['commentRepliesContinuation']
+                # Check for continuation in this specific format
+                if 'continuations' in replies_continuation:
+                    for continuation in replies_continuation['continuations']:
+                        if 'nextContinuationData' in continuation:
+                            return continuation['nextContinuationData'].get('continuation', '')
+        
+        return None
     
     def _find_continuation_token(self, response: Dict) -> Optional[str]:
         """Find the next continuation token in a response."""
