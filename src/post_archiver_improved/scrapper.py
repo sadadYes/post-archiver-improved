@@ -1,10 +1,60 @@
-import requests
 import json
 import base64
 import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
+
+
+def make_http_request(url: str, data: Dict = None, headers: Dict = None, method: str = 'GET') -> Dict:
+    """
+    Utility function to make HTTP requests using urllib.
+    
+    Args:
+        url: The URL to make the request to
+        data: Dictionary to be sent as JSON payload (for POST requests)
+        headers: Dictionary of headers to include in the request
+        method: HTTP method ('GET' or 'POST')
+    
+    Returns:
+        Dictionary containing the JSON response
+    
+    Raises:
+        Exception: If the request fails
+    """
+    try:
+        # Prepare the request
+        if data is not None:
+            # Convert data to JSON bytes for POST requests
+            json_data = json.dumps(data).encode('utf-8')
+        else:
+            json_data = None
+        
+        # Create the request object
+        request = Request(url, data=json_data, headers=headers or {}, method=method)
+        
+        # Make the request
+        with urlopen(request) as response:
+            # Check if response is successful (status 200-299)
+            if response.status < 200 or response.status >= 300:
+                raise Exception(f"HTTP {response.status}: {response.reason}")
+            
+            # Read and decode the response
+            response_data = response.read().decode('utf-8')
+            return json.loads(response_data)
+            
+    except HTTPError as e:
+        raise Exception(f"HTTP error {e.code}: {e.reason}")
+    except URLError as e:
+        raise Exception(f"URL error: {e.reason}")
+    except json.JSONDecodeError as e:
+        raise Exception(f"JSON decode error: {e}")
+    except Exception as e:
+        raise Exception(f"Request failed: {str(e)}")
+
 
 class YouTubeCommunityAPI:
     def __init__(self):
@@ -31,9 +81,7 @@ class YouTubeCommunityAPI:
     def _make_request(self, url: str, payload: Dict) -> Dict:
         """Make a POST request to YouTube API."""
         try:
-            response = requests.post(url, json=payload, headers=self.headers)
-            response.raise_for_status()
-            return response.json()
+            return make_http_request(url, data=payload, headers=self.headers, method='POST')
         except Exception as e:
             raise Exception(f"API request failed: {str(e)}")
     
