@@ -1,11 +1,13 @@
 import json
 import base64
 import traceback
+import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.request import Request, urlopen
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
 
 
@@ -48,6 +50,87 @@ def make_http_request(url: str, data: Dict = None, headers: Dict = None, method:
         raise Exception(f"JSON decode error: {e}")
     except Exception as e:
         raise Exception(f"Request failed: {str(e)}")
+
+
+def download_image(image_url: str, post_id: str, output_dir: Path) -> Optional[str]:
+    """
+    Download an image from a URL and save it with a filename based on the post URL.
+    
+    Args:
+        image_url: The URL of the image to download
+        post_id: The YouTube post URL to use for naming
+        output_dir: Directory to save the image
+    
+    Returns:
+        Path to the downloaded image file, or None if download failed
+    """
+    try:
+        images_dir = output_dir / 'images'
+        images_dir.mkdir(exist_ok=True)
+        
+        parsed_url = urlparse(image_url)
+        path = parsed_url.path
+        
+        if '.' in path:
+            extension = path.split('.')[-1].lower()
+            extension = re.sub(r'[^a-zA-Z0-9]', '', extension)[:10]  # Limit length and clean
+            if extension not in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
+                extension = 'jpg'
+        else:
+            extension = 'jpg'
+        
+        safe_name = re.sub(r'[^\w\-_.]', '_', post_id.replace('https://', '').replace('http://', ''))
+        safe_name = re.sub(r'_+', '_', safe_name).strip('_')
+        
+        # Limit filename length and add extension
+        max_length = 200  # Leave room for extension and path
+        if len(safe_name) > max_length:
+            safe_name = safe_name[:max_length]
+        
+        filename = f"{safe_name}.{extension}"
+        file_path = images_dir / filename
+        
+        counter = 1
+        original_file_path = file_path
+        while file_path.exists():
+            name_without_ext = original_file_path.stem
+            file_path = images_dir / f"{name_without_ext}_{counter}.{extension}"
+            counter += 1
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        request = Request(image_url, headers=headers)
+        with urlopen(request, timeout=30) as response:
+            if response.status != 200:
+                print(f"Failed to download image: HTTP {response.status}")
+                return None
+            
+            content_type = response.headers.get('content-type', '').lower()
+            if not content_type.startswith('image/'):
+                print(f"Warning: Content type '{content_type}' is not an image")
+            
+            with open(file_path, 'wb') as f:
+                f.write(response.read())
+            
+            if file_path.exists() and file_path.stat().st_size > 0:
+                return str(file_path)
+            else:
+                print(f"Failed to save image: File is empty or not created")
+                if file_path.exists():
+                    file_path.unlink()
+                return None
+            
+    except Exception as e:
+        print(f"Error downloading image from {image_url}: {str(e)}")
+        return None
 
 
 class YouTubeCommunityAPI:
@@ -232,29 +315,23 @@ class PostExtractor:
             'members_only': 'sponsorsOnlyBadge' in post_renderer
         }
         
-        # Extract author information
         author_info = PostExtractor._extract_author_info(post_renderer)
         post_data.update(author_info)
         
-        # Extract content and links
         content, links = PostExtractor._extract_content_and_links(post_renderer)
         post_data['content'] = content
         post_data['links'] = links
         
-        # Extract timestamp
         timestamp = post_renderer.get('publishedTimeText', {}).get('runs', [{}])[0].get('text', '')
         post_data['timestamp'] = timestamp
         post_data['timestamp_estimated'] = PostExtractor._is_timestamp_estimated(timestamp)
         
-        # Extract likes
         post_data['likes'] = post_renderer.get('voteCount', {}).get('simpleText', '0')
         
-        # Extract comments count
         comment_count = post_renderer.get('actionButtons', {}).get('commentActionButtonsRenderer', {})\
             .get('replyButton', {}).get('buttonRenderer', {}).get('text', {}).get('simpleText', '0')
         post_data['comments_count'] = comment_count.split()[0] if comment_count else '0'
         
-        # Extract images
         attachment = post_renderer.get('backstageAttachment', {})
         post_data['images'] = PostExtractor._extract_images(attachment)
         
@@ -670,7 +747,9 @@ def scrape_community_posts(
     channel_id: str, 
     max_posts: int = float('inf'), 
     extract_comments: bool = False,
-    max_comments_per_post: int = 100
+    max_comments_per_post: int = 100,
+    download_images: bool = False,
+    output_dir: Optional[Path] = None
 ) -> List[Dict]:
     """Scrape community posts from a YouTube channel."""
     api = YouTubeCommunityAPI()
@@ -680,7 +759,6 @@ def scrape_community_posts(
     try:
         response = api.get_initial_data(channel_id)
         
-        # Find the Community tab
         tabs = response['contents']['twoColumnBrowseResultsRenderer']['tabs']
         community_tab = None
         for tab in tabs:
@@ -691,36 +769,31 @@ def scrape_community_posts(
         if not community_tab:
             raise Exception("Community tab not found")
         
-        # Extract initial posts
         contents = community_tab['content']['sectionListRenderer']['contents'][0]['itemSectionRenderer']['contents']
         
-        # Get continuation token
         continuation_item = next(
             (item for item in contents if 'continuationItemRenderer' in item), None
         )
         token = (continuation_item['continuationItemRenderer']['continuationEndpoint']
                 ['continuationCommand']['token'] if continuation_item else None)
         
-        # Process initial posts
         posts.extend(_process_posts_batch(contents, channel_id, comment_extractor, 
-                                        extract_comments, max_comments_per_post, max_posts))
+                                        extract_comments, max_comments_per_post, max_posts,
+                                        download_images, output_dir))
         
-        # Get remaining posts using continuation token
         while token and len(posts) < max_posts:
             response = api.get_continuation_data(token)
             contents = response['onResponseReceivedEndpoints'][0]['appendContinuationItemsAction']['continuationItems']
             
-            # Get next continuation token
             continuation_item = next(
                 (item for item in contents if 'continuationItemRenderer' in item), None
             )
             token = (continuation_item['continuationItemRenderer']['continuationEndpoint']
                     ['continuationCommand']['token'] if continuation_item else None)
             
-            # Process posts
             new_posts = _process_posts_batch(contents, channel_id, comment_extractor, 
                                            extract_comments, max_comments_per_post, 
-                                           max_posts - len(posts))
+                                           max_posts - len(posts), download_images, output_dir)
             posts.extend(new_posts)
     
     except Exception as e:
@@ -729,7 +802,8 @@ def scrape_community_posts(
     return posts
 
 def _process_posts_batch(contents: List[Dict], channel_id: str, comment_extractor: Optional[CommentExtractor],
-                        extract_comments: bool, max_comments_per_post: int, max_posts: int) -> List[Dict]:
+                        extract_comments: bool, max_comments_per_post: int, max_posts: int,
+                        download_images: bool = False, output_dir: Optional[Path] = None) -> List[Dict]:
     """Process a batch of posts from content list."""
     posts = []
     
@@ -738,7 +812,22 @@ def _process_posts_batch(contents: List[Dict], channel_id: str, comment_extracto
             post_renderer = content['backstagePostThreadRenderer']['post']['backstagePostRenderer']
             post_data = PostExtractor.extract_post_data(post_renderer)
             
-            # Extract comments if requested
+            if download_images and post_data['images'] and output_dir:
+                post_id = f"{post_data['post_id']}"
+                for i, image in enumerate(post_data['images']):
+                    if 'src' in image:
+                        if len(post_data['images']) > 1:
+                            image_post_id = f"{post_id}_image_{i+1}"
+                        else:
+                            image_post_id = post_id
+                        
+                        downloaded_path = download_image(image['src'], image_post_id, output_dir)
+                        if downloaded_path:
+                            image['local_path'] = downloaded_path
+                            print(f"Downloaded image: {downloaded_path}")
+                        else:
+                            print(f"Failed to download image: {image['src']}")
+            
             if extract_comments and comment_extractor and post_data['comments_count'] != '0':
                 post_data['comments'] = comment_extractor.extract_comments(
                     channel_id, post_data['post_id'], max_comments_per_post
@@ -771,12 +860,15 @@ def save_posts(posts: List[Dict], channel_id: str, output_dir: Optional[Path] = 
     
     return filename
 
+#TODO: remove this test code later
 if __name__ == '__main__':
     posts = scrape_community_posts(
         channel_id="UC5CwaMl1eIgY8h02uZw7u8A",
         max_posts=1,
         extract_comments=True,
-        max_comments_per_post=250
+        max_comments_per_post=250,
+        download_images=True,
+        output_dir=Path.cwd()
     )
     
     save_posts(posts, "UC5CwaMl1eIgY8h02uZw7u8A")
