@@ -307,7 +307,7 @@ class FileOperationError(PostArchiverError):
             operation: File operation that failed (read, write, delete, etc.)
             **kwargs: Additional arguments passed to parent
         """
-        context = kwargs.get('context', {})
+        context = kwargs.pop('context', {})  # Use pop instead of get
         if file_path:
             context['file_path'] = file_path
         if operation:
@@ -467,7 +467,7 @@ class ImageDownloadError(FileOperationError):
             image_size: Expected image size if known
             **kwargs: Additional arguments passed to parent
         """
-        context = kwargs.get('context', {})
+        context = kwargs.pop('context', {})  # Use pop instead of get
         if image_url:
             context['image_url'] = image_url
         if image_size:

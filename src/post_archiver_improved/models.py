@@ -227,7 +227,14 @@ class ArchiveData:
     def to_dict(self) -> Dict[str, Any]:
         """Convert archive data to dictionary format for JSON serialization."""
         # Calculate statistics
-        total_comments = sum(len(post.comments) for post in self.posts)
+        def count_comments_recursive(comments):
+            """Recursively count comments including all nested replies."""
+            total = len(comments)
+            for comment in comments:
+                total += count_comments_recursive(comment.replies)
+            return total
+        
+        total_comments = sum(count_comments_recursive(post.comments) for post in self.posts)
         total_images = sum(len(post.images) for post in self.posts)
         images_downloaded = sum(
             1 for post in self.posts 

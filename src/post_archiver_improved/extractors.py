@@ -40,6 +40,51 @@ class PostExtractor:
         return ''.join(run.get('text', '') for run in content_runs)
     
     @staticmethod
+    def _extract_links(content_runs: List[Dict[str, Any]]) -> List[Link]:
+        """
+        Extract links from content runs.
+        
+        Args:
+            content_runs: List of content run objects
+        
+        Returns:
+            List of Link objects
+        """
+        links = []
+        
+        try:
+            for run in content_runs:
+                nav_endpoint = run.get('navigationEndpoint', {})
+                if nav_endpoint:
+                    # Extract URL from various endpoint types
+                    url = None
+                    
+                    if 'commandMetadata' in nav_endpoint:
+                        web_metadata = nav_endpoint['commandMetadata'].get('webCommandMetadata', {})
+                        url = web_metadata.get('url', '')
+                    elif 'urlEndpoint' in nav_endpoint:
+                        url = nav_endpoint['urlEndpoint'].get('url', '')
+                    elif 'browseEndpoint' in nav_endpoint:
+                        canonical_url = nav_endpoint['browseEndpoint'].get('canonicalBaseUrl', '')
+                        if canonical_url:
+                            url = f'https://www.youtube.com{canonical_url}'
+                    
+                    if url:
+                        # Convert relative URLs to absolute
+                        if url.startswith('/'):
+                            url = f'https://www.youtube.com{url}'
+                        
+                        link_text = run.get('text', '')
+                        links.append(Link(text=link_text, url=url))
+            
+            logger.debug(f"Extracted {len(links)} links from content")
+            
+        except Exception as e:
+            logger.warning(f"Error extracting links: {e}")
+        
+        return links
+
+    @staticmethod
     def _extract_author_info(post_renderer: Dict[str, Any]) -> Author:
         """
         Extract author information from post renderer.
@@ -57,7 +102,19 @@ class PostExtractor:
             if 'runs' in author_text and author_text['runs']:
                 author.name = author_text['runs'][0].get('text', '')
                 
+                # Try navigationEndpoint in runs first
                 author_endpoint = author_text['runs'][0].get('navigationEndpoint', {})
+                if 'browseEndpoint' in author_endpoint:
+                    browse_endpoint = author_endpoint['browseEndpoint']
+                    author.id = browse_endpoint.get('browseId', '')
+                    
+                    canonical_url = browse_endpoint.get('canonicalBaseUrl', '')
+                    if canonical_url:
+                        author.url = f"https://www.youtube.com{canonical_url}"
+            
+            # Also try direct authorEndpoint structure
+            if not author.id:
+                author_endpoint = post_renderer.get('authorEndpoint', {})
                 if 'browseEndpoint' in author_endpoint:
                     browse_endpoint = author_endpoint['browseEndpoint']
                     author.id = browse_endpoint.get('browseId', '')
@@ -71,7 +128,7 @@ class PostExtractor:
             if author_thumbnail:
                 author.thumbnail = author_thumbnail[-1].get('url', '')
             
-            # Extract badges
+            # Extract badges - check multiple badge structures
             badges = post_renderer.get('authorBadges', [])
             for badge in badges:
                 if 'metadataBadgeRenderer' in badge:
@@ -80,6 +137,14 @@ class PostExtractor:
                         author.is_verified = True
                     elif 'BADGE_STYLE_TYPE_MEMBER' in badge_type:
                         author.is_member = True
+            
+            # Also check authorCommentBadge structure
+            comment_badge = post_renderer.get('authorCommentBadge', {})
+            if 'authorCommentBadgeRenderer' in comment_badge:
+                badge_renderer = comment_badge['authorCommentBadgeRenderer']
+                icon = badge_renderer.get('icon', {})
+                if icon.get('iconType') == 'CHECK_CIRCLE_THICK':
+                    author.is_verified = True
             
             logger.debug(f"Extracted author info: {author.name} ({author.id})")
             
@@ -147,7 +212,7 @@ class PostExtractor:
         Extract images from attachment data.
         
         Args:
-            attachment: Attachment data from post renderer
+            attachment: Attachment data from post renderer or post renderer with backstageAttachment
         
         Returns:
             List of Image objects
@@ -155,12 +220,16 @@ class PostExtractor:
         images = []
         
         try:
+            # Handle case where full post_renderer is passed (for testing)
+            if 'backstageAttachment' in attachment:
+                attachment = attachment['backstageAttachment']
+            
             # Single image
             if 'backstageImageRenderer' in attachment:
                 image_data = attachment['backstageImageRenderer']['image']
                 thumbnails = image_data.get('thumbnails', [])
                 if thumbnails:
-                    # Get highest quality URL (remove size parameters)
+                    # Get highest quality URL (remove size parameters and add =s0 for best resolution)
                     standard_url = thumbnails[0]['url']
                     src_url = standard_url.split('=')[0] + '=s0'
                     
@@ -229,18 +298,28 @@ class PostExtractor:
     @staticmethod
     def extract_post_data(post_renderer: Dict[str, Any]) -> Post:
         """
-        Extract complete post data from post renderer.
+        Extract post data from API response.
         
         Args:
-            post_renderer: Post renderer data from API response
-        
+            post_renderer: Post renderer data from API or wrapper containing it
+            
         Returns:
             Post object with extracted data
-        
-        Raises:
-            ParseError: If essential post data cannot be extracted
         """
         try:
+            # Handle case where full response is passed (for testing)
+            if 'backstagePostRenderer' in post_renderer:
+                post_renderer = post_renderer['backstagePostRenderer']
+            
+            # Validate input structure
+            if not isinstance(post_renderer, dict) or not post_renderer:
+                raise ParseError("Invalid post renderer structure")
+            
+            # Check if this is a valid post renderer (should have some expected fields)
+            expected_fields = ['postId', 'contentText', 'authorText', 'publishedTimeText']
+            if not any(field in post_renderer for field in expected_fields):
+                raise ParseError("Post renderer missing required fields")
+            
             post = Post()
             
             # Basic post information
@@ -264,6 +343,8 @@ class PostExtractor:
             vote_count = post_renderer.get('voteCount', {})
             if 'simpleText' in vote_count:
                 post.likes = vote_count['simpleText']
+            elif 'runs' in vote_count and vote_count['runs']:
+                post.likes = vote_count['runs'][0].get('text', '0')
             
             # Extract comment count
             action_buttons = post_renderer.get('actionButtons', {})
@@ -275,6 +356,14 @@ class PostExtractor:
             if 'simpleText' in button_text:
                 comment_text = button_text['simpleText']
                 # Extract number from text like "5 Comments"
+                match = re.search(r'(\d+)', comment_text)
+                if match:
+                    post.comments_count = match.group(1)
+                else:
+                    post.comments_count = '0'
+            elif 'runs' in button_text and button_text['runs']:
+                comment_text = button_text['runs'][0].get('text', '')
+                # Extract number from text like "5 Comments" or just "15"
                 match = re.search(r'(\d+)', comment_text)
                 if match:
                     post.comments_count = match.group(1)
@@ -296,6 +385,19 @@ class PostExtractor:
             logger.error(f"Error extracting post data: {e}")
             raise ParseError(f"Failed to extract post data: {e}")
 
+    @staticmethod
+    def extract_post(post_renderer: Dict[str, Any]) -> Post:
+        """
+        Alias for extract_post_data for backward compatibility.
+        
+        Args:
+            post_renderer: Post renderer data from API
+            
+        Returns:
+            Post object with extracted data
+        """
+        return PostExtractor.extract_post_data(post_renderer)
+
 
 class CommentExtractor:
     """
@@ -315,6 +417,109 @@ class CommentExtractor:
         self.api = api_client
         logger.debug("Comment extractor initialized")
     
+    @staticmethod
+    def extract_comment(comment_data: Dict[str, Any]) -> Optional[Comment]:
+        """
+        Extract a single comment from comment data.
+        
+        Args:
+            comment_data: Comment data containing commentRenderer or wrapper
+            
+        Returns:
+            Comment object or None if extraction fails
+        """
+        try:
+            # Validate input structure
+            if not isinstance(comment_data, dict) or not comment_data:
+                raise ParseError("Invalid comment data structure")
+            
+            # Handle case where wrapper is passed
+            if 'commentRenderer' in comment_data:
+                comment_renderer = comment_data['commentRenderer']
+            else:
+                comment_renderer = comment_data
+            
+            # Check if this is a valid comment renderer (should have some expected fields)
+            expected_fields = ['commentId', 'contentText', 'authorText']
+            if not any(field in comment_renderer for field in expected_fields):
+                raise ParseError("Comment renderer missing required fields")
+            
+            # Create a temporary instance to use the extraction method
+            temp_extractor = CommentExtractor(None)
+            return temp_extractor.extract_comment_from_renderer(comment_renderer)
+            
+        except ParseError:
+            # Re-raise ParseError directly
+            raise
+        except Exception as e:
+            logger.warning(f"Error extracting comment: {e}")
+            return None
+    
+    @staticmethod
+    def extract_comments_from_response(response_data: Dict[str, Any]) -> List[Comment]:
+        """
+        Extract comments from API response data.
+        
+        Args:
+            response_data: API response containing comment entities
+            
+        Returns:
+            List of Comment objects
+        """
+        comments = []
+        try:
+            framework_updates = response_data.get('frameworkUpdates', {})
+            entity_batch_update = framework_updates.get('entityBatchUpdate', {})
+            mutations = entity_batch_update.get('mutations', [])
+            
+            # Create a temporary instance to use entity extraction method
+            temp_extractor = CommentExtractor(None)
+            
+            for mutation in mutations:
+                payload = mutation.get('payload', {})
+                if 'commentEntityPayload' in payload:
+                    # Pass the actual entity payload, not the wrapper
+                    entity_payloads = [{'payload': payload}]
+                    comment = temp_extractor.extract_comment_from_entity(entity_payloads)
+                    if comment:
+                        comments.append(comment)
+            
+            logger.debug(f"Extracted {len(comments)} comments from response")
+            
+        except Exception as e:
+            logger.warning(f"Error extracting comments from response: {e}")
+        
+        return comments
+    
+    @staticmethod
+    def extract_replies(reply_data: List[Dict[str, Any]]) -> List[Comment]:
+        """
+        Extract replies from reply data.
+        
+        Args:
+            reply_data: List of reply data containing commentRenderer structures
+            
+        Returns:
+            List of Comment objects
+        """
+        replies = []
+        try:
+            temp_extractor = CommentExtractor(None)
+            
+            for reply_item in reply_data:
+                if 'commentRenderer' in reply_item:
+                    comment_renderer = reply_item['commentRenderer']
+                    comment = temp_extractor.extract_comment_from_renderer(comment_renderer)
+                    if comment:
+                        replies.append(comment)
+            
+            logger.debug(f"Extracted {len(replies)} replies")
+            
+        except Exception as e:
+            logger.warning(f"Error extracting replies: {e}")
+        
+        return replies
+
     def extract_comments(
         self,
         channel_id: str,
@@ -425,12 +630,21 @@ class CommentExtractor:
             
             # Extract basic comment data
             properties = comment_entity.get('properties', {})
-            comment_id = properties.get('commentId', '')
+            comment_id = properties.get('commentId', '') or comment_entity.get('key', '')
             if not comment_id:
                 logger.debug("No comment ID found in entity")
                 return None
             
-            content = properties.get('content', {}).get('content', '')
+            # Handle different content formats
+            content_data = properties.get('content', {})
+            if 'content' in content_data:
+                content = content_data['content']
+            elif 'runs' in content_data:
+                # Handle runs format like {"runs": [{"text": "..."}]}
+                content = ''.join(run.get('text', '') for run in content_data['runs'])
+            else:
+                content = ''
+            
             published_time = properties.get('publishedTime', '')
             
             # Extract author information
@@ -544,11 +758,20 @@ class CommentExtractor:
                 return None
             
             # Extract content
-            content_runs = comment_renderer.get('contentText', {}).get('runs', [])
+            content_text = comment_renderer.get('contentText', {})
+            if content_text is None:
+                content_text = {}
+            content_runs = content_text.get('runs', [])
             content = self.extract_text_content(content_runs)
             
             # Extract metrics
-            like_count = comment_renderer.get('voteCount', {}).get('simpleText', '0')
+            vote_count = comment_renderer.get('voteCount', {})
+            if 'simpleText' in vote_count:
+                like_count = vote_count['simpleText']
+            elif 'runs' in vote_count and vote_count['runs']:
+                like_count = vote_count['runs'][0].get('text', '0')
+            else:
+                like_count = '0'
             
             # Extract timestamp
             published_time_runs = comment_renderer.get('publishedTimeText', {}).get('runs', [])
@@ -556,7 +779,16 @@ class CommentExtractor:
             
             # Extract author information
             author = Author()
-            author.name = comment_renderer.get('authorText', {}).get('simpleText', '')
+            author_text = comment_renderer.get('authorText', {})
+            if author_text is None:
+                author_text = {}
+            
+            if 'simpleText' in author_text:
+                author.name = author_text['simpleText']
+            elif 'runs' in author_text and isinstance(author_text['runs'], list) and author_text['runs']:
+                author.name = author_text['runs'][0].get('text', '')
+            else:
+                author.name = ''
             
             author_endpoint = comment_renderer.get('authorEndpoint', {})
             if 'browseEndpoint' in author_endpoint:
@@ -589,12 +821,30 @@ class CommentExtractor:
                         elif 'MEMBER' in badge_type:
                             author.is_member = True
             
+            # Also check authorCommentBadge structure
+            comment_badge = comment_renderer.get('authorCommentBadge', {})
+            if 'authorCommentBadgeRenderer' in comment_badge:
+                badge_renderer = comment_badge['authorCommentBadgeRenderer']
+                icon = badge_renderer.get('icon', {})
+                if icon.get('iconType') == 'CHECK_CIRCLE_THICK':
+                    author.is_verified = True
+            
+            # Check sponsorCommentBadge structure
+            sponsor_badge = comment_renderer.get('sponsorCommentBadge', {})
+            if 'sponsorCommentBadgeRenderer' in sponsor_badge:
+                author.is_member = True
+            
             # Extract reply count
             reply_count = '0'
             if 'replyCount' in comment_renderer:
                 reply_count_data = comment_renderer['replyCount']
                 if isinstance(reply_count_data, dict):
-                    reply_count = reply_count_data.get('simpleText', '0')
+                    if 'simpleText' in reply_count_data:
+                        reply_count = reply_count_data['simpleText']
+                    elif 'runs' in reply_count_data and reply_count_data['runs']:
+                        reply_count = reply_count_data['runs'][0].get('text', '0')
+                    else:
+                        reply_count = '0'
                 else:
                     reply_count = str(reply_count_data)
             
@@ -614,7 +864,8 @@ class CommentExtractor:
                                     reply_count = match.group(1)
             
             # Extract status flags
-            is_favorited = 'creatorHeart' in comment_renderer.get('actionButtons', {})
+            is_favorited = ('creatorHeart' in comment_renderer.get('actionButtons', {}) or
+                          comment_renderer.get('isLiked', False))
             is_pinned = 'pinnedCommentBadge' in comment_renderer
             
             comment = self._create_comment_object(
