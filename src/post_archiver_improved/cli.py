@@ -1,63 +1,377 @@
-from scrapper import scrape_community_posts, save_posts
-from pathlib import Path
-import argparse
+"""
+Command-line interface for the YouTube Community Posts Archiver.
 
-def main():
-    parser = argparse.ArgumentParser(description='YouTube Community Posts Scraper')
-    parser.add_argument('channel_id', help='YouTube channel ID')
-    parser.add_argument('-n', '--num-posts', type=int, default=float('inf'),
-                      help='Number of posts to scrape (default: all)')
-    parser.add_argument('-c', '--comments', action='store_true',
-                      help='Extract comments for each post')
-    parser.add_argument('--max-comments', type=int, default=100,
-                      help='Maximum number of comments to extract per post (default: 100)')
-    parser.add_argument('-i', '--download-images', action='store_true',
-                      help='Download images from posts to local directory')
-    parser.add_argument('-o', '--output', type=Path, default=Path.cwd(),
-                      help='Output directory (default: current directory)')
+This module provides a comprehensive CLI with proper argument parsing,
+configuration management, and user-friendly output.
+"""
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Optional
+
+from . import __version__, __description__
+from .config import load_config, update_config_from_args, save_config_to_file
+from .logging_config import setup_logging, get_logger
+from .scraper import CommunityPostScraper
+from .output import OutputManager
+from .exceptions import (
+    PostArchiverError, ValidationError, APIError, 
+    NetworkError, FileOperationError
+)
+from .utils import validate_channel_id, format_file_size
+
+
+def create_argument_parser() -> argparse.ArgumentParser:
+    """
+    Create and configure the argument parser.
     
+    Returns:
+        Configured ArgumentParser instance
+    """
+    parser = argparse.ArgumentParser(
+        prog='post-archiver',
+        description=__description__,
+        epilog='For more information, visit: https://github.com/sadadYes/post-archiver-improved',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    # Version
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f'%(prog)s {__version__}'
+    )
+    
+    # Required arguments
+    parser.add_argument(
+        'channel_id',
+        help='YouTube channel ID, handle (@username), or channel URL'
+    )
+    
+    # Scraping options
+    scraping_group = parser.add_argument_group('Scraping Options')
+    scraping_group.add_argument(
+        '-n', '--num-posts',
+        type=int,
+        metavar='N',
+        help='Maximum number of posts to scrape (default: unlimited)'
+    )
+    scraping_group.add_argument(
+        '-c', '--comments',
+        action='store_true',
+        help='Extract comments for each post'
+    )
+    scraping_group.add_argument(
+        '--max-comments',
+        type=int,
+        default=100,
+        metavar='N',
+        help='Maximum number of comments to extract per post (default: 100)'
+    )
+    scraping_group.add_argument(
+        '--max-replies',
+        type=int,
+        default=200,
+        metavar='N',
+        help='Maximum number of replies to extract per comment (default: 200)'
+    )
+    scraping_group.add_argument(
+        '-i', '--download-images',
+        action='store_true',
+        help='Download images from posts to local directory'
+    )
+    
+    # Output options
+    output_group = parser.add_argument_group('Output Options')
+    output_group.add_argument(
+        '-o', '--output',
+        type=Path,
+        metavar='DIR',
+        help='Output directory (default: current directory)'
+    )
+    output_group.add_argument(
+        '--no-summary',
+        action='store_true',
+        help='Do not create summary report'
+    )
+    output_group.add_argument(
+        '--compact',
+        action='store_true',
+        help='Save JSON in compact format (no pretty printing)'
+    )
+    
+    # Configuration options
+    config_group = parser.add_argument_group('Configuration Options')
+    config_group.add_argument(
+        '--config',
+        type=Path,
+        metavar='FILE',
+        help='Configuration file path'
+    )
+    config_group.add_argument(
+        '--save-config',
+        type=Path,
+        metavar='FILE',
+        help='Save current configuration to file'
+    )
+    
+    # Network options
+    network_group = parser.add_argument_group('Network Options')
+    network_group.add_argument(
+        '--timeout',
+        type=int,
+        default=30,
+        metavar='SECONDS',
+        help='Request timeout in seconds (default: 30)'
+    )
+    network_group.add_argument(
+        '--retries',
+        type=int,
+        default=3,
+        metavar='N',
+        help='Maximum number of retry attempts (default: 3)'
+    )
+    network_group.add_argument(
+        '--delay',
+        type=float,
+        default=1.0,
+        metavar='SECONDS',
+        help='Delay between requests in seconds (default: 1.0)'
+    )
+    
+    # Logging options
+    logging_group = parser.add_argument_group('Logging Options')
+    logging_group.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Enable verbose output (INFO level)'
+    )
+    logging_group.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug output (DEBUG level)'
+    )
+    logging_group.add_argument(
+        '--log-file',
+        type=Path,
+        metavar='FILE',
+        help='Log to file in addition to console'
+    )
+    logging_group.add_argument(
+        '--quiet',
+        action='store_true',
+        help='Suppress all output except errors'
+    )
+    
+    return parser
+
+
+def normalize_channel_id(channel_id: str) -> str:
+    """
+    Normalize channel ID from various formats.
+    
+    Args:
+        channel_id: Raw channel ID input
+    
+    Returns:
+        Normalized channel ID
+    """
+    # Remove common URL prefixes
+    channel_id = channel_id.strip()
+    
+    # Handle full YouTube URLs
+    if 'youtube.com/' in channel_id:
+        if '/channel/' in channel_id:
+            channel_id = channel_id.split('/channel/')[-1].split('/')[0]
+        elif '/c/' in channel_id:
+            channel_id = channel_id.split('/c/')[-1].split('/')[0]
+        elif '/@' in channel_id:
+            channel_id = '@' + channel_id.split('/@')[-1].split('/')[0]
+    
+    return channel_id
+
+
+def print_summary(archive_data, output_path: Path, args) -> None:
+    """
+    Print summary information to console.
+    
+    Args:
+        archive_data: Archive data with results
+        output_path: Path to saved archive file
+        args: Command line arguments
+    """
+    posts = archive_data.posts
+    metadata = archive_data.metadata
+    
+    print(f"\n✓ Successfully scraped {len(posts)} posts from channel {metadata.channel_id}")
+    print(f"✓ Results saved to: {output_path}")
+    
+    if output_path.exists():
+        file_size = format_file_size(output_path.stat().st_size)
+        print(f"✓ File size: {file_size}")
+    
+    # Comment statistics
+    if args.comments:
+        total_comments = sum(len(post.comments) for post in posts)
+        total_replies = sum(
+            sum(len(comment.replies) for comment in post.comments)
+            for post in posts
+        )
+        print(f"✓ Comments extracted: {total_comments} comments, {total_replies} replies")
+    
+    # Image statistics
+    if args.download_images:
+        total_images = sum(len(post.images) for post in posts)
+        downloaded_images = sum(
+            1 for post in posts
+            for image in post.images
+            if image.local_path
+        )
+        if total_images > 0:
+            success_rate = (downloaded_images / total_images) * 100
+            print(f"✓ Images downloaded: {downloaded_images}/{total_images} ({success_rate:.1f}%)")
+            if downloaded_images > 0:
+                images_dir = args.output / 'images' if args.output else Path.cwd() / 'images'
+                print(f"✓ Images saved to: {images_dir}")
+        else:
+            print("✓ No images found in the scraped posts")
+
+
+def handle_error(error: Exception, logger) -> int:
+    """
+    Handle different types of errors with appropriate messages.
+    
+    Args:
+        error: Exception that occurred
+        logger: Logger instance
+    
+    Returns:
+        Exit code
+    """
+    if isinstance(error, ValidationError):
+        logger.error(f"Validation error: {error}")
+        return 2
+    elif isinstance(error, NetworkError):
+        logger.error(f"Network error: {error}")
+        logger.info("Please check your internet connection and try again")
+        return 3
+    elif isinstance(error, APIError):
+        logger.error(f"YouTube API error: {error}")
+        logger.info("This might be due to rate limiting or changes in YouTube's API")
+        return 4
+    elif isinstance(error, FileOperationError):
+        logger.error(f"File operation error: {error}")
+        logger.info("Please check file permissions and available disk space")
+        return 5
+    elif isinstance(error, PostArchiverError):
+        logger.error(f"Application error: {error}")
+        return 6
+    else:
+        logger.error(f"Unexpected error: {error}")
+        logger.debug("Full traceback:", exc_info=True)
+        return 1
+
+
+def main() -> int:
+    """
+    Main entry point for the CLI application.
+    
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    parser = create_argument_parser()
     args = parser.parse_args()
     
-    try:
-        # Scrape posts
-        posts = scrape_community_posts(
-            args.channel_id, 
-            args.num_posts,
-            extract_comments=args.comments,
-            max_comments_per_post=args.max_comments,
-            download_images=args.download_images,
-            output_dir=args.output
-        )
-        
-        # Save posts
-        output_file = save_posts(posts, args.channel_id, args.output)
-        
-        print(f"\nSuccessfully scraped {len(posts)} posts")
-        print(f"Results saved to: {output_file}")
-        
-        if args.download_images:
-            # Count total images downloaded
-            total_images = 0
-            downloaded_images = 0
-            for post in posts:
-                total_images += len(post.get('images', []))
-                for image in post.get('images', []):
-                    if 'local_path' in image:
-                        downloaded_images += 1
-            
-            if total_images > 0:
-                print(f"Images: {downloaded_images}/{total_images} downloaded successfully")
-                if downloaded_images > 0:
-                    images_dir = args.output / 'images'
-                    print(f"Images saved to: {images_dir}")
-            else:
-                print("No images found in the scraped posts")
-        
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return 1
+    # Set up logging
+    logger = setup_logging(
+        verbose=args.verbose and not args.quiet,
+        debug=args.debug and not args.quiet,
+        log_file=args.log_file
+    )
     
-    return 0
+    if args.quiet:
+        # Disable console output for quiet mode
+        import logging
+        logging.getLogger().handlers[0].setLevel(logging.ERROR)
+    
+    try:
+        logger.info(f"Post Archiver Improved v{__version__}")
+        logger.debug(f"Arguments: {vars(args)}")
+        
+        # Validate and normalize channel ID
+        channel_id = normalize_channel_id(args.channel_id)
+        if not validate_channel_id(channel_id):
+            raise ValidationError(f"Invalid channel ID format: {args.channel_id}")
+        
+        # Load configuration
+        config = load_config(args.config)
+        
+        # Update configuration with command line arguments
+        config_updates = {
+            'max_posts': args.num_posts or config.scraping.max_posts,
+            'extract_comments': args.comments,
+            'max_comments_per_post': args.max_comments,
+            'max_replies_per_comment': args.max_replies,
+            'download_images': args.download_images,
+            'output_dir': args.output,
+            'log_file': args.log_file
+        }
+        
+        # Update network settings
+        config.scraping.request_timeout = args.timeout
+        config.scraping.max_retries = args.retries
+        config.scraping.retry_delay = args.delay
+        
+        # Update output settings
+        config.output.pretty_print = not args.compact
+        
+        config = update_config_from_args(config, **config_updates)
+        
+        # Save configuration if requested
+        if args.save_config:
+            if save_config_to_file(config, args.save_config):
+                logger.info(f"Configuration saved to: {args.save_config}")
+            else:
+                logger.warning(f"Failed to save configuration to: {args.save_config}")
+        
+        # Create scraper and start scraping
+        scraper = CommunityPostScraper(config)
+        logger.info(f"Starting scrape for channel: {channel_id}")
+        
+        archive_data = scraper.scrape_posts(channel_id)
+        
+        if not archive_data.posts:
+            logger.warning("No posts found for this channel")
+            if not args.quiet:
+                print("No posts found for this channel. This might be because:")
+                print("- The channel has no community posts")
+                print("- The channel's community tab is not accessible")
+                print("- The channel ID is incorrect")
+            return 0
+        
+        # Save results
+        output_manager = OutputManager(config.output)
+        output_path = output_manager.save_archive_data(archive_data)
+        
+        # Create summary report unless disabled
+        if not args.no_summary:
+            summary_path = output_manager.save_summary_report(archive_data)
+            if summary_path:
+                logger.info(f"Summary report saved: {summary_path}")
+        
+        # Print summary to console
+        if not args.quiet:
+            print_summary(archive_data, output_path, args)
+        
+        return 0
+        
+    except KeyboardInterrupt:
+        logger.info("Operation cancelled by user")
+        return 130
+    except Exception as e:
+        return handle_error(e, logger)
+
 
 if __name__ == '__main__':
-    exit(main())
+    sys.exit(main())

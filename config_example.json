@@ -1,0 +1,19 @@
+{
+  "scraping": {
+    "max_posts": "infinity",
+    "extract_comments": false,
+    "max_comments_per_post": 100,
+    "max_replies_per_comment": 200,
+    "download_images": false,
+    "request_timeout": 30,
+    "max_retries": 3,
+    "retry_delay": 1.0
+  },
+  "output": {
+    "output_dir": null,
+    "save_format": "json",
+    "pretty_print": true,
+    "include_metadata": true
+  },
+  "log_file": null
+}

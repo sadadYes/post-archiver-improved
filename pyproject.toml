@@ -1,0 +1,42 @@
+# This need to be updated because it's currently incorrect
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "post-archiver-improved"
+version = "0.2.0"
+description = "A Python tool for archiving YouTube community posts with zero dependencies"
+readme = "README.md"
+license = {text = "GPL-3.0"}
+authors = [{name = "sadadYes", email = "syaddadpunya@gmail.com"}]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Multimedia :: Video",
+]
+keywords = ["youtube", "community", "posts", "archiver", "scraper"]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/sadadYes/post-archiver-improved"
+Repository = "https://github.com/sadadYes/post-archiver-improved"
+Issues = "https://github.com/sadadYes/post-archiver-improved/issues"
+
+[project.scripts]
+post-archiver = "post_archiver_improved.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+post_archiver_improved = ["py.typed"]
