@@ -5,8 +5,12 @@ This module tests logging setup, configuration, and colored output
 functionality.
 """
 
+import gc
 import logging
+import platform
 import sys
+import time
+from contextlib import contextmanager
 from io import StringIO
 from unittest.mock import patch
 
@@ -17,6 +21,37 @@ from post_archiver_improved.logging_config import (
     get_logger,
     setup_logging,
 )
+
+
+@contextmanager
+def cleanup_logging_handlers():
+    """Context manager to ensure all logging handlers are properly cleaned up."""
+    try:
+        yield
+    finally:
+        # Comprehensive cleanup for Windows file handle issues
+        logger = logging.getLogger("post_archiver_improved")
+
+        # Close all handlers, especially file handlers, but be careful about stderr
+        for handler in logger.handlers[:]:
+            if hasattr(handler, "close"):
+                # Don't close stderr StreamHandlers
+                if (
+                    isinstance(handler, logging.StreamHandler)
+                    and hasattr(handler, "stream")
+                    and handler.stream == sys.stderr
+                ):
+                    continue
+                handler.close()
+            logger.removeHandler(handler)
+
+        # Clear the logger
+        logger.setLevel(logging.NOTSET)
+
+        # Force garbage collection and allow OS to release handles
+        gc.collect()
+        if platform.system() == "Windows":
+            time.sleep(0.2)  # Longer delay for Windows file handle release
 
 
 class TestColoredFormatter:
@@ -133,6 +168,11 @@ class TestSetupLogging:
             logger.removeHandler(handler)
         logger.setLevel(logging.NOTSET)
 
+        # Force garbage collection and brief pause for Windows file handle release
+        gc.collect()
+        if platform.system() == "Windows":
+            time.sleep(0.1)  # Small delay for Windows to release file handles
+
     def test_basic_setup(self):
         """Test basic logging setup."""
         logger = setup_logging()
@@ -168,36 +208,38 @@ class TestSetupLogging:
 
     def test_file_logging(self, temp_dir):
         """Test logging to file."""
-        log_file = temp_dir / "test.log"
+        with cleanup_logging_handlers():
+            log_file = temp_dir / "test.log"
 
-        logger = setup_logging(log_file=log_file)
+            logger = setup_logging(log_file=log_file)
 
-        # Should have at least two handlers: console and file
-        assert len(logger.handlers) >= 2
+            # Should have at least two handlers: console and file
+            assert len(logger.handlers) >= 2
 
-        # Find file handler
-        file_handler = None
-        for handler in logger.handlers:
-            if isinstance(handler, logging.FileHandler):
-                file_handler = handler
-                break
+            # Find file handler
+            file_handler = None
+            for handler in logger.handlers:
+                if isinstance(handler, logging.FileHandler):
+                    file_handler = handler
+                    break
 
-        assert file_handler is not None
-        assert log_file.name in str(file_handler.baseFilename)
+            assert file_handler is not None
+            assert log_file.name in str(file_handler.baseFilename)
 
     def test_file_logging_creates_directory(self, temp_dir):
         """Test that file logging creates parent directories."""
-        nested_dir = temp_dir / "logs" / "nested"
-        log_file = nested_dir / "test.log"
+        with cleanup_logging_handlers():
+            nested_dir = temp_dir / "logs" / "nested"
+            log_file = nested_dir / "test.log"
 
-        logger = setup_logging(log_file=log_file)
+            logger = setup_logging(log_file=log_file)
 
-        # Write a test message
-        logger.info("Test message")
+            # Write a test message
+            logger.info("Test message")
 
-        # Check that directory was created
-        assert nested_dir.exists()
-        assert log_file.exists()
+            # Check that directory was created
+            assert nested_dir.exists()
+            assert log_file.exists()
 
     def test_console_handler_has_colored_formatter(self):
         """Test that console handler uses ColoredFormatter."""
@@ -218,19 +260,20 @@ class TestSetupLogging:
 
     def test_file_handler_has_standard_formatter(self, temp_dir):
         """Test that file handler uses standard formatter."""
-        log_file = temp_dir / "test.log"
-        logger = setup_logging(log_file=log_file)
+        with cleanup_logging_handlers():
+            log_file = temp_dir / "test.log"
+            logger = setup_logging(log_file=log_file)
 
-        # Find file handler
-        file_handler = None
-        for handler in logger.handlers:
-            if isinstance(handler, logging.FileHandler):
-                file_handler = handler
-                break
+            # Find file handler
+            file_handler = None
+            for handler in logger.handlers:
+                if isinstance(handler, logging.FileHandler):
+                    file_handler = handler
+                    break
 
-        assert file_handler is not None
-        assert not isinstance(file_handler.formatter, ColoredFormatter)
-        assert isinstance(file_handler.formatter, logging.Formatter)
+            assert file_handler is not None
+            assert not isinstance(file_handler.formatter, ColoredFormatter)
+            assert isinstance(file_handler.formatter, logging.Formatter)
 
     def test_custom_logger_name(self):
         """Test setup with custom logger name."""
@@ -241,23 +284,24 @@ class TestSetupLogging:
 
     def test_logging_levels_work(self, temp_dir):
         """Test that different logging levels work correctly."""
-        log_file = temp_dir / "levels_test.log"
-        logger = setup_logging(debug=True, log_file=log_file)
+        with cleanup_logging_handlers():
+            log_file = temp_dir / "levels_test.log"
+            logger = setup_logging(debug=True, log_file=log_file)
 
-        # Test all levels
-        logger.debug("Debug message")
-        logger.info("Info message")
-        logger.warning("Warning message")
-        logger.error("Error message")
-        logger.critical("Critical message")
+            # Test all levels
+            logger.debug("Debug message")
+            logger.info("Info message")
+            logger.warning("Warning message")
+            logger.error("Error message")
+            logger.critical("Critical message")
 
-        # Check that messages were written to file
-        log_content = log_file.read_text()
-        assert "Debug message" in log_content
-        assert "Info message" in log_content
-        assert "Warning message" in log_content
-        assert "Error message" in log_content
-        assert "Critical message" in log_content
+            # Check that messages were written to file
+            log_content = log_file.read_text()
+            assert "Debug message" in log_content
+            assert "Info message" in log_content
+            assert "Warning message" in log_content
+            assert "Error message" in log_content
+            assert "Critical message" in log_content
 
 
 class TestGetLogger:
@@ -306,6 +350,11 @@ class TestLoggingIntegration:
             logger.removeHandler(handler)
         logger.setLevel(logging.NOTSET)
 
+        # Force garbage collection and brief pause for Windows file handle release
+        gc.collect()
+        if platform.system() == "Windows":
+            time.sleep(0.1)  # Small delay for Windows to release file handles
+
     def test_module_logger_names(self):
         """Test that module loggers have correct names."""
         # This would be called from within modules
@@ -317,75 +366,77 @@ class TestLoggingIntegration:
 
     def test_logging_with_file_permissions_error(self, temp_dir):
         """Test handling of file permission errors."""
-        import os
-        import platform
+        with cleanup_logging_handlers():
+            import os
 
-        # Create a read-only directory
-        readonly_dir = temp_dir / "readonly"
-        readonly_dir.mkdir()
+            # Create a read-only directory
+            readonly_dir = temp_dir / "readonly"
+            readonly_dir.mkdir()
 
-        # Handle Windows vs Unix permission setting
-        if platform.system() == "Windows":
-            # On Windows, use os.chmod to make directory read-only
-            import stat
-
-            os.chmod(readonly_dir, stat.S_IREAD)
-        else:
-            readonly_dir.chmod(0o444)  # Read-only
-
-        log_file = readonly_dir / "test.log"
-
-        # This should not raise an exception
-        try:
-            logger = setup_logging(log_file=log_file)
-            # Should fall back to console-only logging
-            assert len(logger.handlers) >= 1
-        except Exception as e:
-            pytest.fail(
-                f"setup_logging should handle permission errors gracefully: {e}"
-            )
-        finally:
-            # Clean up - restore permissions
+            # Handle Windows vs Unix permission setting
             if platform.system() == "Windows":
+                # On Windows, use os.chmod to make directory read-only
                 import stat
 
-                os.chmod(readonly_dir, stat.S_IWRITE | stat.S_IREAD)
+                os.chmod(readonly_dir, stat.S_IREAD)
             else:
-                readonly_dir.chmod(0o755)
+                readonly_dir.chmod(0o444)  # Read-only
+
+            log_file = readonly_dir / "test.log"
+
+            # This should not raise an exception
+            try:
+                logger = setup_logging(log_file=log_file)
+                # Should fall back to console-only logging
+                assert len(logger.handlers) >= 1
+            except Exception as e:
+                pytest.fail(
+                    f"setup_logging should handle permission errors gracefully: {e}"
+                )
+            finally:
+                # Clean up - restore permissions
+                if platform.system() == "Windows":
+                    import stat
+
+                    os.chmod(readonly_dir, stat.S_IWRITE | stat.S_IREAD)
+                else:
+                    readonly_dir.chmod(0o755)
 
     def test_log_message_format(self, temp_dir):
         """Test that log messages have expected format."""
-        log_file = temp_dir / "format_test.log"
-        logger = setup_logging(debug=True, log_file=log_file)
+        with cleanup_logging_handlers():
+            log_file = temp_dir / "format_test.log"
+            logger = setup_logging(debug=True, log_file=log_file)
 
-        test_message = "Test log message"
-        logger.info(test_message)
+            test_message = "Test log message"
+            logger.info(test_message)
 
-        log_content = log_file.read_text()
+            log_content = log_file.read_text()
 
-        # Should contain timestamp, level, and message
-        assert test_message in log_content
-        assert "INFO" in log_content
-        # Should have timestamp (basic check for date-like format)
-        assert any(char.isdigit() for char in log_content)
+            # Should contain timestamp, level, and message
+            assert test_message in log_content
+            assert "INFO" in log_content
+            # Should have timestamp (basic check for date-like format)
+            assert any(char.isdigit() for char in log_content)
 
     def test_exception_logging(self, temp_dir):
         """Test logging of exceptions with tracebacks."""
-        log_file = temp_dir / "exception_test.log"
-        logger = setup_logging(debug=True, log_file=log_file)
+        with cleanup_logging_handlers():
+            log_file = temp_dir / "exception_test.log"
+            logger = setup_logging(debug=True, log_file=log_file)
 
-        try:
-            raise ValueError("Test exception")
-        except ValueError:
-            logger.exception("An error occurred")
+            try:
+                raise ValueError("Test exception")
+            except ValueError:
+                logger.exception("An error occurred")
 
-        log_content = log_file.read_text()
+            log_content = log_file.read_text()
 
-        # Should contain exception message and traceback
-        assert "An error occurred" in log_content
-        assert "ValueError" in log_content
-        assert "Test exception" in log_content
-        assert "Traceback" in log_content
+            # Should contain exception message and traceback
+            assert "An error occurred" in log_content
+            assert "ValueError" in log_content
+            assert "Test exception" in log_content
+            assert "Traceback" in log_content
 
 
 class TestLoggingConfiguration:
@@ -400,6 +451,11 @@ class TestLoggingConfiguration:
                 handler.close()
             logger.removeHandler(handler)
         logger.setLevel(logging.NOTSET)
+
+        # Force garbage collection and brief pause for Windows file handle release
+        gc.collect()
+        if platform.system() == "Windows":
+            time.sleep(0.1)  # Small delay for Windows to release file handles
 
     def test_multiple_setup_calls(self):
         """Test that multiple setup calls don't create duplicate handlers."""
