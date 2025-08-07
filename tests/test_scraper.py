@@ -115,7 +115,7 @@ class TestScrapePosts:
         mock_post.post_id = "test_post_1"
         mock_post.comments_count = "0"
         mock_post.images = []
-        mock_extractor.extract_post.return_value = mock_post
+        mock_extractor.extract_post_data.return_value = mock_post
         mock_extractor_class.return_value = mock_extractor
         
         scraper = CommunityPostScraper(self.config)

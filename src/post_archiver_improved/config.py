@@ -8,6 +8,11 @@ import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional, Dict, Any
+
+from .constants import (
+    DEFAULT_TIMEOUT, DEFAULT_MAX_RETRIES, DEFAULT_RETRY_DELAY,
+    DEFAULT_MAX_COMMENTS, DEFAULT_MAX_REPLIES
+)
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -18,12 +23,12 @@ class ScrapingConfig:
     """Configuration for scraping operations."""
     max_posts: int = float('inf')
     extract_comments: bool = False
-    max_comments_per_post: int = 100
-    max_replies_per_comment: int = 200
+    max_comments_per_post: int = DEFAULT_MAX_COMMENTS
+    max_replies_per_comment: int = DEFAULT_MAX_REPLIES
     download_images: bool = False
-    request_timeout: int = 30
-    max_retries: int = 3
-    retry_delay: float = 1.0
+    request_timeout: int = DEFAULT_TIMEOUT
+    max_retries: int = DEFAULT_MAX_RETRIES
+    retry_delay: float = DEFAULT_RETRY_DELAY
 
 
 @dataclass

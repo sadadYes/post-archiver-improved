@@ -265,7 +265,7 @@ class TestPostExtractor:
             }
         }
         
-        post = PostExtractor.extract_post(post_data)
+        post = PostExtractor.extract_post_data(post_data)
         
         assert post.post_id == "post123"
         assert post.content == "Test post content with a link"
@@ -289,7 +289,7 @@ class TestPostExtractor:
             }
         }
         
-        post = PostExtractor.extract_post(post_data)
+        post = PostExtractor.extract_post_data(post_data)
         
         assert post.post_id == "minimal_post"
         assert post.content == "Basic post"
@@ -304,7 +304,7 @@ class TestPostExtractor:
         invalid_data = {"invalidRenderer": {}}
         
         with pytest.raises(ParseError):
-            PostExtractor.extract_post(invalid_data)
+            PostExtractor.extract_post_data(invalid_data)
     
     def test_extract_post_missing_post_id(self):
         """Test post extraction with missing post ID."""
@@ -314,7 +314,7 @@ class TestPostExtractor:
             }
         }
         
-        post = PostExtractor.extract_post(post_data)
+        post = PostExtractor.extract_post_data(post_data)
         assert post.post_id == ""  # Should handle gracefully
     
     def test_extract_members_only_post(self):
@@ -331,7 +331,7 @@ class TestPostExtractor:
             }
         }
         
-        post = PostExtractor.extract_post(post_data)
+        post = PostExtractor.extract_post_data(post_data)
         
         assert post.post_id == "members_post"
         assert post.members_only is True
@@ -560,7 +560,7 @@ class TestExtractorErrorHandling:
         }
         
         # Should handle gracefully without crashing
-        post = PostExtractor.extract_post(malformed_data)
+        post = PostExtractor.extract_post_data(malformed_data)
         assert post.post_id == "test_post"
         assert post.content == ""  # Should fallback to empty string
     
@@ -585,7 +585,7 @@ class TestExtractorErrorHandling:
         # Post without backstagePostRenderer
         post_data = {"someOtherRenderer": {}}
         with pytest.raises(ParseError):
-            PostExtractor.extract_post(post_data)
+            PostExtractor.extract_post_data(post_data)
         
         # Comment without commentRenderer
         comment_data = {"someOtherRenderer": {}}
@@ -607,7 +607,7 @@ class TestExtractorErrorHandling:
             }
         }
         
-        post = PostExtractor.extract_post(unicode_post_data)
+        post = PostExtractor.extract_post_data(unicode_post_data)
         
         assert post.content == "Hello 世界! 🎥 Тест 📹"
         assert post.author.name == "测试频道"
@@ -624,7 +624,7 @@ class TestExtractorErrorHandling:
             }
         }
         
-        post = PostExtractor.extract_post(large_post_data)
+        post = PostExtractor.extract_post_data(large_post_data)
         
         assert len(post.content) == 100000  # 100 * 1000
         assert post.post_id == "large_post"

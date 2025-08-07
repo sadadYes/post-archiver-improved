@@ -8,6 +8,7 @@ from YouTube's API responses into structured data models.
 import re
 from typing import Dict, List, Optional, Any, Tuple
 
+from .constants import YOUTUBE_BASE_URL, RELATIVE_TIME_INDICATORS
 from .models import Post, Comment, Author, Image, Link
 from .exceptions import ParseError
 from .logging_config import get_logger
@@ -67,12 +68,12 @@ class PostExtractor:
                     elif 'browseEndpoint' in nav_endpoint:
                         canonical_url = nav_endpoint['browseEndpoint'].get('canonicalBaseUrl', '')
                         if canonical_url:
-                            url = f'https://www.youtube.com{canonical_url}'
+                            url = f'{YOUTUBE_BASE_URL}{canonical_url}'
                     
                     if url:
                         # Convert relative URLs to absolute
                         if url.startswith('/'):
-                            url = f'https://www.youtube.com{url}'
+                            url = f'{YOUTUBE_BASE_URL}{url}'
                         
                         link_text = run.get('text', '')
                         links.append(Link(text=link_text, url=url))
@@ -110,7 +111,7 @@ class PostExtractor:
                     
                     canonical_url = browse_endpoint.get('canonicalBaseUrl', '')
                     if canonical_url:
-                        author.url = f"https://www.youtube.com{canonical_url}"
+                        author.url = f"{YOUTUBE_BASE_URL}{canonical_url}"
             
             # Also try direct authorEndpoint structure
             if not author.id:
@@ -121,7 +122,7 @@ class PostExtractor:
                     
                     canonical_url = browse_endpoint.get('canonicalBaseUrl', '')
                     if canonical_url:
-                        author.url = f"https://www.youtube.com{canonical_url}"
+                        author.url = f"{YOUTUBE_BASE_URL}{canonical_url}"
             
             # Extract thumbnail
             author_thumbnail = post_renderer.get('authorThumbnail', {}).get('thumbnails', [])
@@ -187,12 +188,12 @@ class PostExtractor:
                         elif 'browseEndpoint' in nav_endpoint:
                             canonical_url = nav_endpoint['browseEndpoint'].get('canonicalBaseUrl', '')
                             if canonical_url:
-                                url = f'https://www.youtube.com{canonical_url}'
+                                url = f'{YOUTUBE_BASE_URL}{canonical_url}'
                         
                         if url:
                             # Convert relative URLs to absolute
                             if url.startswith('/'):
-                                url = f'https://www.youtube.com{url}'
+                                url = f'{YOUTUBE_BASE_URL}{url}'
                             
                             links.append(Link(
                                 text=run.get('text', ''),
@@ -287,13 +288,7 @@ class PostExtractor:
         Returns:
             True if timestamp appears to be estimated/relative
         """
-        relative_indicators = [
-            'hour', 'hours', 'minute', 'minutes', 'day', 'days',
-            'week', 'weeks', 'month', 'months', 'year', 'years',
-            'ago', 'edited'
-        ]
-        
-        return any(indicator in timestamp.lower() for indicator in relative_indicators)
+        return any(indicator in timestamp.lower() for indicator in RELATIVE_TIME_INDICATORS)
     
     @staticmethod
     def extract_post_data(post_renderer: Dict[str, Any]) -> Post:
@@ -384,19 +379,6 @@ class PostExtractor:
         except Exception as e:
             logger.error(f"Error extracting post data: {e}")
             raise ParseError(f"Failed to extract post data: {e}")
-
-    @staticmethod
-    def extract_post(post_renderer: Dict[str, Any]) -> Post:
-        """
-        Alias for extract_post_data for backward compatibility.
-        
-        Args:
-            post_renderer: Post renderer data from API
-            
-        Returns:
-            Post object with extracted data
-        """
-        return PostExtractor.extract_post_data(post_renderer)
 
 
 class CommentExtractor:
@@ -546,22 +528,6 @@ class CommentExtractor:
             channel_id, post_id, max_comments, max_replies_per_comment
         )
     
-    @staticmethod
-    def extract_text_content(content_runs: List[Dict[str, Any]]) -> str:
-        """
-        Extract plain text content from YouTube's 'runs' format.
-        
-        Args:
-            content_runs: List of content run objects
-        
-        Returns:
-            Extracted plain text
-        """
-        if not content_runs:
-            return ""
-        
-        return ''.join(run.get('text', '') for run in content_runs)
-    
     def _create_comment_object(
         self,
         comment_id: str,
@@ -662,11 +628,11 @@ class CommentExtractor:
             if 'browseEndpoint' in channel_command:
                 canonical_url = channel_command['browseEndpoint'].get('canonicalBaseUrl', '')
                 if canonical_url:
-                    author.url = f"https://www.youtube.com{canonical_url}"
+                    author.url = f"{YOUTUBE_BASE_URL}{canonical_url}"
             elif 'commandMetadata' in channel_command:
                 web_metadata = channel_command['commandMetadata'].get('webCommandMetadata', {})
                 if 'url' in web_metadata:
-                    author.url = f"https://www.youtube.com{web_metadata['url']}"
+                    author.url = f"{YOUTUBE_BASE_URL}{web_metadata['url']}"
             
             # Extract toolbar data (likes, favorited status, reply count)
             like_count, is_favorited, reply_count = self._extract_toolbar_data(
@@ -762,7 +728,7 @@ class CommentExtractor:
             if content_text is None:
                 content_text = {}
             content_runs = content_text.get('runs', [])
-            content = self.extract_text_content(content_runs)
+            content = PostExtractor.extract_text_content(content_runs)
             
             # Extract metrics
             vote_count = comment_renderer.get('voteCount', {})
@@ -796,7 +762,7 @@ class CommentExtractor:
                 author.id = browse_endpoint.get('browseId', '')
                 canonical_url = browse_endpoint.get('canonicalBaseUrl', '')
                 if canonical_url:
-                    author.url = f"https://www.youtube.com{canonical_url}"
+                    author.url = f"{YOUTUBE_BASE_URL}{canonical_url}"
             
             # Extract author thumbnail
             author_thumbnails = comment_renderer.get('authorThumbnail', {}).get('thumbnails', [])

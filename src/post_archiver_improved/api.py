@@ -8,6 +8,10 @@ for community posts and comments.
 import base64
 from typing import Dict, Any, Optional
 
+from .constants import (
+    YOUTUBE_BROWSE_ENDPOINT, YOUTUBE_NEXT_ENDPOINT, YOUTUBE_BASE_URL,
+    DEFAULT_USER_AGENT, YOUTUBE_CLIENT_VERSION, COMMUNITY_TAB_PARAMS
+)
 from .exceptions import APIError, NetworkError, ValidationError
 from .logging_config import get_logger
 from .utils import make_http_request
@@ -32,26 +36,26 @@ class YouTubeCommunityAPI:
             max_retries: Maximum number of retry attempts
             retry_delay: Delay between retries in seconds
         """
-        self.base_url = "https://www.youtube.com/youtubei/v1/browse"
-        self.next_url = "https://www.youtube.com/youtubei/v1/next"
+        self.base_url = YOUTUBE_BROWSE_ENDPOINT
+        self.next_url = YOUTUBE_NEXT_ENDPOINT
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         
         self.headers = {
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
             "X-YouTube-Client-Name": "1",
-            "X-YouTube-Client-Version": "2.20241113.07.00",
-            "Origin": "https://www.youtube.com",
-            "Referer": "https://www.youtube.com/"
+            "X-YouTube-Client-Version": YOUTUBE_CLIENT_VERSION,
+            "Origin": YOUTUBE_BASE_URL,
+            "Referer": f"{YOUTUBE_BASE_URL}/"
         }
         
         self.client_context = {
             "client": {
                 "hl": "en-GB",
                 "clientName": "WEB",
-                "clientVersion": "2.20241113.07.00"
+                "clientVersion": YOUTUBE_CLIENT_VERSION
             },
             "user": {
                 "lockedSafetyMode": False
@@ -123,7 +127,7 @@ class YouTubeCommunityAPI:
         payload = {
             "context": self.client_context,
             "browseId": channel_id,
-            "params": "Egljb21tdW5pdHnyBgQKAkoA"  # Base64 encoded parameters for community tab
+            "params": COMMUNITY_TAB_PARAMS  # Base64 encoded parameters for community tab
         }
         
         try:
