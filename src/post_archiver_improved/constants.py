@@ -29,7 +29,18 @@ IMAGES_DIR_NAME = "images"
 
 # Timestamp estimation indicators
 RELATIVE_TIME_INDICATORS = [
-    'hour', 'hours', 'minute', 'minutes', 'day', 'days',
-    'week', 'weeks', 'month', 'months', 'year', 'years',
-    'ago', 'edited'
+    "hour",
+    "hours",
+    "minute",
+    "minutes",
+    "day",
+    "days",
+    "week",
+    "weeks",
+    "month",
+    "months",
+    "year",
+    "years",
+    "ago",
+    "edited",
 ]

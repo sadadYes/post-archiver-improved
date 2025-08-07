@@ -4,21 +4,27 @@ Configuration file for pytest.
 This file contains pytest configuration and shared fixtures.
 """
 
-import os
 import json
-import tempfile
-import pytest
-from pathlib import Path
-from unittest.mock import Mock, MagicMock
-from datetime import datetime
 
 # Add src to Python path for imports
 import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from post_archiver_improved.config import Config, ScrapingConfig, OutputConfig
+from post_archiver_improved.config import Config, OutputConfig, ScrapingConfig
 from post_archiver_improved.models import (
-    Post, Comment, Author, Image, Link, ArchiveData, ArchiveMetadata
+    ArchiveData,
+    ArchiveMetadata,
+    Author,
+    Comment,
+    Image,
+    Link,
+    Post,
 )
 
 
@@ -41,15 +47,15 @@ def sample_config():
             download_images=False,
             request_timeout=20,
             max_retries=2,
-            retry_delay=0.5
+            retry_delay=0.5,
         ),
         output=OutputConfig(
             output_dir=None,
-            save_format='json',
+            save_format="json",
             pretty_print=True,
-            include_metadata=True
+            include_metadata=True,
         ),
-        log_file=None
+        log_file=None,
     )
 
 
@@ -62,7 +68,7 @@ def sample_author():
         url="https://youtube.com/channel/UC123456789",
         thumbnail="https://example.com/avatar.jpg",
         is_verified=True,
-        is_member=False
+        is_member=False,
     )
 
 
@@ -79,7 +85,7 @@ def sample_comment(sample_author):
         is_favorited=False,
         is_pinned=False,
         reply_count="2",
-        replies=[]
+        replies=[],
     )
 
 
@@ -91,17 +97,14 @@ def sample_image():
         local_path=None,
         width=800,
         height=600,
-        file_size=1024000
+        file_size=1024000,
     )
 
 
 @pytest.fixture
 def sample_link():
     """Create a sample link for testing."""
-    return Link(
-        text="Example Link",
-        url="https://example.com"
-    )
+    return Link(text="Example Link", url="https://example.com")
 
 
 @pytest.fixture
@@ -118,7 +121,7 @@ def sample_post(sample_author, sample_comment, sample_image, sample_link):
         author=sample_author,
         images=[sample_image],
         links=[sample_link],
-        comments=[sample_comment]
+        comments=[sample_comment],
     )
 
 
@@ -133,17 +136,14 @@ def sample_archive_metadata():
         total_comments=15,
         total_images=3,
         images_downloaded=0,
-        config_used={"max_posts": 10, "extract_comments": True}
+        config_used={"max_posts": 10, "extract_comments": True},
     )
 
 
 @pytest.fixture
 def sample_archive_data(sample_archive_metadata, sample_post):
     """Create sample archive data for testing."""
-    return ArchiveData(
-        metadata=sample_archive_metadata,
-        posts=[sample_post]
-    )
+    return ArchiveData(metadata=sample_archive_metadata, posts=[sample_post])
 
 
 @pytest.fixture
@@ -165,22 +165,32 @@ def mock_api_response():
                                                     "backstagePostRenderer": {
                                                         "postId": "test_post_123",
                                                         "contentText": {
-                                                            "runs": [{"text": "Test post content"}]
+                                                            "runs": [
+                                                                {
+                                                                    "text": "Test post content"
+                                                                }
+                                                            ]
                                                         },
                                                         "publishedTimeText": {
-                                                            "runs": [{"text": "1 day ago"}]
+                                                            "runs": [
+                                                                {"text": "1 day ago"}
+                                                            ]
                                                         },
-                                                        "voteCount": {"runs": [{"text": "10"}]},
+                                                        "voteCount": {
+                                                            "runs": [{"text": "10"}]
+                                                        },
                                                         "authorText": {
-                                                            "runs": [{"text": "Test Channel"}]
-                                                        }
+                                                            "runs": [
+                                                                {"text": "Test Channel"}
+                                                            ]
+                                                        },
                                                     }
                                                 }
                                             }
                                         }
                                     ]
                                 }
-                            }
+                            },
                         }
                     }
                 ]
@@ -193,7 +203,7 @@ def mock_api_response():
 def mock_http_response():
     """Create a mock HTTP response for testing."""
     mock_response = Mock()
-    mock_response.read.return_value = json.dumps({"test": "data"}).encode('utf-8')
+    mock_response.read.return_value = json.dumps({"test": "data"}).encode("utf-8")
     mock_response.getcode.return_value = 200
     mock_response.info.return_value = {"Content-Type": "application/json"}
     return mock_response
@@ -203,14 +213,14 @@ def mock_http_response():
 def mock_youtube_api():
     """Create a mock YouTube API client for testing."""
     from post_archiver_improved.api import YouTubeCommunityAPI
-    
+
     api = Mock(spec=YouTubeCommunityAPI)
     api.get_initial_data.return_value = {"test": "data"}
     api.get_continuation_data.return_value = {"test": "continuation_data"}
     api.timeout = 30
     api.max_retries = 3
     api.retry_delay = 1.0
-    
+
     return api
 
 
@@ -219,12 +229,7 @@ TEST_CHANNEL_IDS = [
     "UC123456789",
     "@testchannel",
     "https://youtube.com/channel/UC123456789",
-    "https://youtube.com/@testchannel"
+    "https://youtube.com/@testchannel",
 ]
 
-INVALID_CHANNEL_IDS = [
-    "",
-    "invalid",
-    "UC",
-    "https://google.com"
-]
+INVALID_CHANNEL_IDS = ["", "invalid", "UC", "https://google.com"]

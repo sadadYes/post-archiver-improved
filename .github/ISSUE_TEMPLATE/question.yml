@@ -1,0 +1,57 @@
+name: Question or Support
+description: Ask a question or get help with using the post archiver
+title: "[Question]: "
+labels: ["question", "help-wanted"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need help or have a question? Please fill out the form below and we'll try to help!
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What's your question or what do you need help with?
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide context about what you're trying to achieve
+      placeholder: I'm trying to...
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What Have You Tried?
+      description: What have you already tried or researched?
+      placeholder: I tried...
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment (if relevant)
+      description: Please provide information about your environment
+      placeholder: |
+        - OS: [e.g., Ubuntu 22.04, Windows 11, macOS 13]
+        - Python version: [e.g., 3.11.0]
+        - post-archiver-improved version: [e.g., 0.2.0]
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have checked the README and documentation
+          required: true
+        - label: I have searched existing issues for similar questions
+          required: true
+        - label: This is not a bug report (use the bug report template instead)
+          required: true

@@ -1,0 +1,143 @@
+# Repository labels configuration
+# This file defines all the labels used in this repository
+
+- name: "bug"
+  color: "d73a4a"
+  description: "Something isn't working"
+  
+- name: "enhancement"
+  color: "a2eeef"
+  description: "New feature or request"
+  
+- name: "documentation"
+  color: "0075ca"
+  description: "Improvements or additions to documentation"
+  
+- name: "question"
+  color: "d876e3"
+  description: "Further information is requested"
+  
+- name: "help-wanted"
+  color: "008672"
+  description: "Extra attention is needed"
+  
+- name: "good-first-issue"
+  color: "7057ff"
+  description: "Good for newcomers"
+
+# Priority labels
+- name: "priority/low"
+  color: "e6f7ff"
+  description: "Low priority"
+  
+- name: "priority/medium"
+  color: "bae7ff"
+  description: "Medium priority"
+  
+- name: "priority/high"
+  color: "69c0ff"
+  description: "High priority"
+  
+- name: "priority/critical"
+  color: "1890ff"
+  description: "Critical priority"
+
+# Status labels
+- name: "needs-triage"
+  color: "fbca04"
+  description: "Needs initial evaluation"
+  
+- name: "needs-discussion"
+  color: "ffcc00"
+  description: "Needs team/community discussion"
+  
+- name: "needs-investigation"
+  color: "ff9900"
+  description: "Needs further investigation"
+  
+- name: "in-progress"
+  color: "0e8a16"
+  description: "Currently being worked on"
+  
+- name: "blocked"
+  color: "b60205"
+  description: "Blocked by dependencies or other issues"
+  
+- name: "waiting-for-response"
+  color: "cc9900"
+  description: "Waiting for response from reporter"
+
+# Component labels
+- name: "component/api"
+  color: "5319e7"
+  description: "Related to YouTube API interaction"
+  
+- name: "component/cli"
+  color: "5319e7"
+  description: "Related to command line interface"
+  
+- name: "component/scraper"
+  color: "5319e7"
+  description: "Related to scraping functionality"
+  
+- name: "component/config"
+  color: "5319e7"
+  description: "Related to configuration management"
+  
+- name: "component/output"
+  color: "5319e7"
+  description: "Related to output formatting"
+  
+- name: "component/logging"
+  color: "5319e7"
+  description: "Related to logging functionality"
+
+# Effort labels
+- name: "effort/small"
+  color: "c2e0c6"
+  description: "Small effort required"
+  
+- name: "effort/medium"
+  color: "fef2c0"
+  description: "Medium effort required"
+  
+- name: "effort/large"
+  color: "f9d0c4"
+  description: "Large effort required"
+
+# Special labels
+- name: "breaking-change"
+  color: "d93f0b"
+  description: "Introduces breaking changes"
+  
+- name: "security"
+  color: "b60205"
+  description: "Security related issue"
+  
+- name: "performance"
+  color: "ff6b6b"
+  description: "Performance related"
+  
+- name: "dependencies"
+  color: "0366d6"
+  description: "Related to project dependencies"
+  
+- name: "python"
+  color: "3776ab"
+  description: "Python specific"
+  
+- name: "github-actions"
+  color: "2088ff"
+  description: "Related to GitHub Actions"
+  
+- name: "duplicate"
+  color: "cfd3d7"
+  description: "This issue or pull request already exists"
+  
+- name: "invalid"
+  color: "e4e669"
+  description: "This doesn't seem right"
+  
+- name: "wontfix"
+  color: "ffffff"
+  description: "This will not be worked on"

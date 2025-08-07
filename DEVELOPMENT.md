@@ -56,18 +56,12 @@ pytest tests/test_basic.py -v
 ## Code Quality Tools
 
 ```bash
-# Format code
-black src/ tests/
-
-# Sort imports
-isort src/ tests/
+# Format and lint code with ruff
+ruff check src/ tests/
+ruff format src/ tests/
 
 # Type checking
 mypy src/
-
-# Linting
-flake8 src/ tests/
-pylint src/post_archiver_improved/
 ```
 
 ## Installation Options
@@ -118,5 +112,5 @@ post-archiver-improved/
 - **Dynamic Versioning**: Version managed in single location
 - **Modern Configuration**: Uses pyproject.toml for all configuration
 - **Type Support**: Includes py.typed marker for type hints
-- **Development Tools**: Pre-configured black, isort, mypy, pytest
+- **Development Tools**: Pre-configured ruff, mypy, pytest
 - **Professional Structure**: Follows Python packaging best practices

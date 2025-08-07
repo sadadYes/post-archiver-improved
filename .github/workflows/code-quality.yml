@@ -1,0 +1,98 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, develop, refactoring_codebase ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run weekly code quality checks on Sundays at 6 AM UTC
+    - cron: '0 6 * * 0'
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for better analysis
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+        pip install radon xenon vulture
+        
+    - name: Run Ruff
+      run: |
+        ruff check src/ --output-format=json > ruff-report.json || true
+        ruff check src/
+      continue-on-error: true
+      
+    - name: Cyclomatic Complexity Analysis
+      run: |
+        radon cc src/ --min=B --show-complexity --average --json > complexity-report.json
+        radon cc src/ --min=B --show-complexity --average
+      continue-on-error: true
+      
+    - name: Maintainability Index
+      run: |
+        radon mi src/ --json > maintainability-report.json
+        radon mi src/
+      continue-on-error: true
+      
+    - name: Dead Code Detection
+      run: |
+        vulture src/ --json > vulture-report.json || true
+        vulture src/
+      continue-on-error: true
+      
+    - name: Upload quality reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-reports
+        path: |
+          ruff-report.json
+          complexity-report.json
+          maintainability-report.json
+          vulture-report.json
+        retention-days: 30
+
+  performance-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+        pip install pytest-benchmark memory-profiler
+        
+    - name: Run performance tests
+      run: |
+        # Run benchmark tests if they exist
+        if [ -d "tests/benchmarks" ]; then
+          pytest tests/benchmarks/ --benchmark-json=benchmark-results.json
+        fi
+      continue-on-error: true
+      
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: benchmark-results.json
+        retention-days: 30
+      if: always()

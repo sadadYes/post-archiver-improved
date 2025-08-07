@@ -61,8 +61,7 @@ When suggesting new features:
 
 **Code Style:**
 - Follow PEP 8 style guidelines
-- Use Black for code formatting: `black src/ tests/`
-- Use isort for import sorting: `isort src/ tests/`
+- Use Ruff for code formatting and linting: `ruff format src/ tests/` and `ruff check src/ tests/`
 - Line length limit: 88 characters
 
 **Type Hints:**
@@ -112,8 +111,8 @@ Add support for playlist archiving
    ```bash
    pytest tests/
    mypy src/
-   black --check src/ tests/
-   isort --check-only src/ tests/
+   ruff check src/ tests/
+   ruff format --check src/ tests/
    ```
 
 2. **Update documentation** if necessary
@@ -147,16 +146,12 @@ pytest tests/ -v
 ### Code Quality Checks
 
 ```bash
-# Format code
-black src/ tests/
-isort src/ tests/
+# Format and lint code
+ruff format src/ tests/
+ruff check src/ tests/
 
 # Type checking
 mypy src/
-
-# Linting
-flake8 src/ tests/
-pylint src/post_archiver_improved/
 ```
 
 ### Building and Testing Package

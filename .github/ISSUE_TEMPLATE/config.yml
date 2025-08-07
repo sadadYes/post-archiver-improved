@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentation
+    url: https://github.com/sadadYes/post-archiver-improved/blob/main/README.md
+    about: Check the documentation for usage instructions and examples
+  - name: 💬 Discussions
+    url: https://github.com/sadadYes/post-archiver-improved/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 🔒 Security Issue
+    url: https://github.com/sadadYes/post-archiver-improved/security/advisories
+    about: Report a security vulnerability privately

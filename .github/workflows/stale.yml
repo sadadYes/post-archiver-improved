@@ -1,0 +1,65 @@
+name: Stale Issue Management
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sundays at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'sadadYes'
+    
+    steps:
+    - uses: actions/stale@v8
+      with:
+        repo-token: ${{ secrets.GH_TOKEN }}
+        
+        # Days before marking as stale
+        days-before-stale: 60
+        days-before-close: 14
+        
+        # Labels
+        stale-issue-label: 'stale'
+        stale-pr-label: 'stale'
+        exempt-issue-labels: 'pinned,security,help-wanted,good-first-issue'
+        exempt-pr-labels: 'pinned,security'
+        
+        # Messages
+        stale-issue-message: |
+          This issue has been automatically marked as stale because it has not had recent activity. 
+          It will be closed if no further activity occurs within 14 days. 
+          
+          If this issue is still relevant, please:
+          - Add a comment describing the current status
+          - Remove the stale label
+          - Provide any updates or additional information
+          
+          Thank you for your contributions!
+          
+        stale-pr-message: |
+          This pull request has been automatically marked as stale because it has not had recent activity.
+          It will be closed if no further activity occurs within 14 days.
+          
+          If this pull request is still relevant, please:
+          - Rebase on the latest main branch
+          - Address any review comments
+          - Remove the stale label
+          - Add a comment with current status
+          
+          Thank you for your contributions!
+          
+        close-issue-message: |
+          This issue has been automatically closed due to inactivity.
+          
+          If this issue is still relevant, please feel free to reopen it or create a new issue with updated information.
+          
+        close-pr-message: |
+          This pull request has been automatically closed due to inactivity.
+          
+          If you'd like to continue with this pull request, please feel free to reopen it or create a new one.
+          
+        # Operations
+        operations-per-run: 30
+        remove-stale-when-updated: true
+        debug-only: false
