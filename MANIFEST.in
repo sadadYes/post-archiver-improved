@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
+include pyproject.toml
+recursive-include src/post_archiver_improved *.py
+recursive-include src/post_archiver_improved *.typed
+recursive-include tests *.py
+prune src/post_archiver_improved/__pycache__
+prune tests/__pycache__
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store
