@@ -27,7 +27,7 @@ jobs:
         fetch-depth: 0  # Fetch full history for changelog
         
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         
@@ -58,6 +58,9 @@ jobs:
     - name: Check package
       run: twine check dist/*
       
+    - name: List built files
+      run: ls -la dist/
+      
     - name: Generate changelog
       id: changelog
       run: |
@@ -79,33 +82,14 @@ jobs:
         EOF
         
     - name: Create Release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v1
       id: create_release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
       with:
         tag_name: v${{ steps.extract_version.outputs.version }}
-        release_name: Release v${{ steps.extract_version.outputs.version }}
+        name: Release v${{ steps.extract_version.outputs.version }}
         body_path: changelog.txt
         draft: false
         prerelease: ${{ github.event.inputs.prerelease || false }}
-        
-    - name: Upload Release Assets
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/post_archiver_improved-${{ steps.extract_version.outputs.version }}-py3-none-any.whl
-        asset_name: post_archiver_improved-${{ steps.extract_version.outputs.version }}-py3-none-any.whl
-        asset_content_type: application/zip
-        
-    - name: Upload Source Distribution
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/post-archiver-improved-${{ steps.extract_version.outputs.version }}.tar.gz
-        asset_name: post-archiver-improved-${{ steps.extract_version.outputs.version }}.tar.gz
-        asset_content_type: application/gzip
+        files: |
+          dist/*
+        token: ${{ secrets.GH_TOKEN }}
