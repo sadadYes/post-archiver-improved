@@ -1,42 +1,51 @@
-<!-- TODO: This needs to be updated due to inaccuracy. this needs to be updated to be more professional and serious -->
 # Post Archiver Improved
 
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-GPL%20v3-blue.svg)](LICENSE)
-[![Code Quality](https://img.shields.io/badge/code%20quality-A-green.svg)]()
+[![PyPI](https://img.shields.io/pypi/v/post-archiver-improved.svg)](https://pypi.org/project/post-archiver-improved/)
+[![Downloads](https://img.shields.io/pypi/dm/post-archiver-improved.svg)](https://pypi.org/project/post-archiver-improved/)
 
-A lightweight, zero-dependency Python tool for archiving YouTube community posts with comprehensive features including comments extraction, image downloading, and detailed logging.
+A professional-grade Python package for archiving YouTube community posts with comprehensive data extraction capabilities. Built with zero external dependencies for maximum compatibility and reliability.
 
-This project aims to replace and improve [post-archiver](https://github.com/sadadYes/post-archiver) with better architecture, error handling, and user experience.
+**Post Archiver Improved** is a complete rewrite of the original [post-archiver](https://github.com/sadadYes/post-archiver) project, featuring better architecture, robust error handling, and extensive testing coverage.
 
-## ✨ Features
+## Key Features
 
-- **📄 Bulk archival** of YouTube community posts
-- **💬 Comments extraction** with full reply chains
-- **🖼️ Image downloading** with original quality preservation
-- **🔧 Zero dependencies** - uses only Python standard library
-- **⚡ Fast and lightweight** with intelligent rate limiting
-- **📊 Detailed logging** with configurable verbosity levels
-- **⚙️ Configuration management** with multiple config sources
-- **📈 Progress tracking** and comprehensive error handling
-- **📋 Summary reports** with detailed statistics
-- **🔄 Backup creation** to prevent data loss
+- **Comprehensive Data Extraction** - Complete archival of YouTube community posts with metadata preservation
+- **Advanced Comment Processing** - Full comment trees with reply chains and author information
+- **High-Quality Image Archiving** - Original resolution image downloads with metadata
+- **Zero External Dependencies** - Built entirely on Python standard library for maximum compatibility
+- **Performance Optimized** - Intelligent rate limiting and concurrent processing capabilities
+- **Comprehensive Logging** - Configurable logging levels with structured output and file rotation
+- **Flexible Configuration** - Multi-source configuration management (CLI, files, environment variables)
+- **Progress Monitoring** - Real-time progress tracking with detailed statistics and ETA
+- **Comprehensive Reporting** - Detailed summary reports with archival statistics and health metrics
+- **Data Integrity** - Automatic backup creation and data validation to prevent corruption
+- **Robust Error Handling** - Graceful failure recovery with detailed error reporting
+- **Extensible Architecture** - Modular design supporting custom extractors and output formats
 
-## 🚀 Installation
+## Installation
 
-### From PyPI (Coming Soon)
+### From PyPI (Recommended)
 ```bash
 pip install post-archiver-improved
 ```
 
-### From Source
+### From Source (Development)
 ```bash
 git clone https://github.com/sadadYes/post-archiver-improved.git
 cd post-archiver-improved
 pip install -e .
 ```
 
-## 📖 Usage
+### Development Installation
+```bash
+git clone https://github.com/sadadYes/post-archiver-improved.git
+cd post-archiver-improved
+pip install -e ".[dev]"
+```
+
+## Usage
 
 ### Basic Usage
 
@@ -87,7 +96,7 @@ The tool accepts various channel ID formats:
 - **Custom URL**: `https://youtube.com/c/channelname`
 - **Handle URL**: `https://youtube.com/@username`
 
-## 🔧 Configuration
+## Configuration
 
 ### Command Line Options
 
@@ -149,7 +158,7 @@ Use saved configuration:
 post-archiver UC5CwaMl1eIgY8h02uZw7u8A --config my_config.json
 ```
 
-## 📁 Output Format
+## Output Format
 
 ### Archive File Structure
 
@@ -226,7 +235,7 @@ The tool creates a JSON file with the following structure:
 - `images/` - Downloaded images (if enabled)
 - `[LOG_FILE]` - Log file (if specified)
 
-## 🛠️ Development
+## Development
 
 ### Project Structure
 
@@ -282,7 +291,7 @@ python -m pytest tests/ -v
 python -m pytest tests/ --cov=post_archiver_improved --cov-report=html
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -320,7 +329,7 @@ This will provide detailed information about:
 - File operations
 - Error stack traces
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
 
@@ -342,30 +351,17 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 - Include tests for new functionality
 - Update documentation as needed
 
-## 📋 TODO
+## TODO
 
-- [ ] ✅ ~~Add option to extract comments~~
-- [ ] ✅ ~~Fix extracted image quality~~
-- [ ] ✅ ~~Fix replies continuation logic~~
-- [ ] ✅ ~~Add option to download images~~
-- [ ] ✅ ~~Modularize the project to improve readability~~
-- [ ] 🔄 Make this into a python package (in progress)
-- [ ] 📝 Create test suites
-- [ ] 📚 Create comprehensive documentation
-- [ ] 🌐 Add support for other output formats (CSV, XML)
-- [ ] ⚡ Add parallel processing for faster downloads
-- [ ] 🔍 Add search and filtering capabilities
-- [ ] 📊 Add data analysis tools
-
-## 📄 License
+## License
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-This project is *heavily* inspired by the [yt-dlp community plugin](https://github.com/biggestsonicfan/yt-dlp-community-plugin) by [biggestsonicfan](https://github.com/biggestsonicfan).
+This project is heavily inspired by the [yt-dlp community plugin](https://github.com/biggestsonicfan/yt-dlp-community-plugin) by [biggestsonicfan](https://github.com/biggestsonicfan).
 
-## 📞 Support
+## Support
 
 If you encounter any issues or have questions:
 
@@ -376,7 +372,3 @@ If you encounter any issues or have questions:
    - Error messages or logs
    - System information (OS, Python version)
    - Expected vs actual behavior
-
----
-
-⭐ **If this tool helps you, please consider giving it a star!** ⭐
