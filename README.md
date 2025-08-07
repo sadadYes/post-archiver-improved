@@ -1,4 +1,4 @@
-<!-- This needs to be updated due to inaccuracy -->
+<!-- TODO: This needs to be updated due to inaccuracy. this needs to be updated to be more professional and serious -->
 # Post Archiver Improved
 
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)

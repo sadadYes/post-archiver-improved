@@ -12,6 +12,7 @@ from typing import Optional
 
 from . import __version__, __description__
 from .config import load_config, update_config_from_args, save_config_to_file
+from .constants import DEFAULT_TIMEOUT, DEFAULT_MAX_RETRIES, DEFAULT_RETRY_DELAY, DEFAULT_MAX_COMMENTS, DEFAULT_MAX_REPLIES
 from .logging_config import setup_logging, get_logger
 from .scraper import CommunityPostScraper
 from .output import OutputManager
@@ -65,16 +66,16 @@ def create_argument_parser() -> argparse.ArgumentParser:
     scraping_group.add_argument(
         '--max-comments',
         type=int,
-        default=100,
+        default=DEFAULT_MAX_COMMENTS,
         metavar='N',
-        help='Maximum number of comments to extract per post (default: 100)'
+        help=f'Maximum number of comments to extract per post (default: {DEFAULT_MAX_COMMENTS})'
     )
     scraping_group.add_argument(
         '--max-replies',
         type=int,
-        default=200,
+        default=DEFAULT_MAX_REPLIES,
         metavar='N',
-        help='Maximum number of replies to extract per comment (default: 200)'
+        help=f'Maximum number of replies to extract per comment (default: {DEFAULT_MAX_REPLIES})'
     )
     scraping_group.add_argument(
         '-i', '--download-images',
@@ -121,23 +122,23 @@ def create_argument_parser() -> argparse.ArgumentParser:
     network_group.add_argument(
         '--timeout',
         type=int,
-        default=30,
+        default=DEFAULT_TIMEOUT,
         metavar='SECONDS',
-        help='Request timeout in seconds (default: 30)'
+        help=f'Request timeout in seconds (default: {DEFAULT_TIMEOUT})'
     )
     network_group.add_argument(
         '--retries',
         type=int,
-        default=3,
+        default=DEFAULT_MAX_RETRIES,
         metavar='N',
-        help='Maximum number of retry attempts (default: 3)'
+        help=f'Maximum number of retry attempts (default: {DEFAULT_MAX_RETRIES})'
     )
     network_group.add_argument(
         '--delay',
         type=float,
-        default=1.0,
+        default=DEFAULT_RETRY_DELAY,
         metavar='SECONDS',
-        help='Delay between requests in seconds (default: 1.0)'
+        help=f'Delay between requests in seconds (default: {DEFAULT_RETRY_DELAY})'
     )
     
     # Logging options
