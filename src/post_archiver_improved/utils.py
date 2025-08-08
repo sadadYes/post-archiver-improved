@@ -102,8 +102,9 @@ def _generate_sapisid_authorization(sapisid: str, origin: str) -> str:
     """
     timestamp = str(int(time.time()))
     # Create hash of timestamp, sapisid, and origin
+    # Note: SHA1 is required by YouTube's SAPISID protocol specification
     hash_input = f"{timestamp} {sapisid} {origin}"
-    hash_value = hashlib.sha1(hash_input.encode()).hexdigest()
+    hash_value = hashlib.sha1(hash_input.encode(), usedforsecurity=False).hexdigest()
     return f"SAPISIDHASH {timestamp}_{hash_value}"
 
 
