@@ -5,7 +5,7 @@ This module tests the YouTube API client including request handling,
 error management, and response parsing.
 """
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -87,20 +87,23 @@ class TestAPIRequestMethods:
         assert call_args.kwargs["url"] == api.base_url  # URL
         assert "browseId" in str(call_args.kwargs["data"])  # Data contains browseId
 
+    @patch("post_archiver_improved.api.YouTubeCommunityAPI.resolve_channel_handle")
     @patch("post_archiver_improved.api.make_http_request")
-    def test_get_initial_data_with_handle(self, mock_request):
+    def test_get_initial_data_with_handle(self, mock_request, mock_resolve):
         """Test get_initial_data with @ handle."""
         mock_response = {"test": "data"}
         mock_request.return_value = mock_response
+        mock_resolve.return_value = "UC123456789012345678901"
 
         api = YouTubeCommunityAPI()
         result = api.get_initial_data("@testchannel")
 
         assert result == mock_response
-        # Should handle @ format correctly
+        # Should resolve the handle to a channel ID
+        mock_resolve.assert_called_once_with("@testchannel")
         call_args = mock_request.call_args
         request_data = call_args.kwargs["data"]
-        assert "@testchannel" in str(request_data)
+        assert request_data["browseId"] == "UC123456789012345678901"
 
     @patch("post_archiver_improved.api.make_http_request")
     def test_get_continuation_data_success(self, mock_request):
@@ -417,6 +420,143 @@ class TestAPIErrorConditions:
                         api.get_continuation_data(token)
                     except Exception:
                         pass  # Server-side validation errors are acceptable
+
+
+class TestChannelHandleResolution:
+    """Test channel handle resolution functionality."""
+
+    @patch("urllib.request.urlopen")
+    def test_resolve_channel_handle_success(self, mock_urlopen):
+        """Test successful channel handle resolution."""
+        # Mock the HTML response containing channel ID
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.read.return_value = b"""
+        <html>
+        <head>
+            <meta property="og:url" content="https://www.youtube.com/channel/UC5CwaMl1eIgY8h02uZw7u8A">
+        </head>
+        <body>
+        </body>
+        </html>
+        """
+        mock_response.info.return_value = {}
+        mock_response.__enter__ = lambda self: self
+        mock_response.__exit__ = lambda *args: None
+        mock_urlopen.return_value = mock_response
+
+        api = YouTubeCommunityAPI()
+        result = api.resolve_channel_handle("@testchannel")
+
+        assert result == "UC5CwaMl1eIgY8h02uZw7u8A"
+        mock_urlopen.assert_called_once()
+
+    @patch("urllib.request.urlopen")
+    def test_resolve_channel_handle_json_pattern(self, mock_urlopen):
+        """Test channel handle resolution using JSON pattern."""
+        # Mock response with channelId in JSON format
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.read.return_value = b"""
+        var ytInitialData = {"channelId":"UCG7J20LhUeLl6y_Emi7OJrA","title":"Test Channel"};
+        """
+        mock_response.info.return_value = {}
+        mock_response.__enter__ = lambda self: self
+        mock_response.__exit__ = lambda *args: None
+        mock_urlopen.return_value = mock_response
+
+        api = YouTubeCommunityAPI()
+        result = api.resolve_channel_handle("@mkbhd")
+
+        assert result == "UCG7J20LhUeLl6y_Emi7OJrA"
+
+    def test_resolve_channel_handle_invalid_format(self):
+        """Test error handling for invalid handle format."""
+        api = YouTubeCommunityAPI()
+
+        invalid_handles = ["testchannel", "UC123456789", "", "user/testchannel"]
+
+        for handle in invalid_handles:
+            with pytest.raises(ValidationError) as exc_info:
+                api.resolve_channel_handle(handle)
+            assert "Invalid handle format" in str(exc_info.value)
+
+    @patch("urllib.request.urlopen")
+    def test_resolve_channel_handle_http_error(self, mock_urlopen):
+        """Test handling of HTTP errors during resolution."""
+        from urllib.error import HTTPError
+
+        mock_urlopen.side_effect = HTTPError(
+            url="https://www.youtube.com/@test",
+            code=404,
+            msg="Not Found",
+            hdrs={},
+            fp=None,
+        )
+
+        api = YouTubeCommunityAPI()
+
+        with pytest.raises(APIError) as exc_info:
+            api.resolve_channel_handle("@nonexistent")
+        assert "Failed to resolve channel handle" in str(exc_info.value)
+
+    @patch("urllib.request.urlopen")
+    def test_resolve_channel_handle_no_match(self, mock_urlopen):
+        """Test handling when no channel ID patterns are found."""
+        # Mock response without any channel ID patterns
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.read.return_value = b"""
+        <html>
+        <head><title>Some page</title></head>
+        <body><p>No channel ID here</p></body>
+        </html>
+        """
+        mock_response.info.return_value = {}
+        mock_response.__enter__ = lambda self: self
+        mock_response.__exit__ = lambda *args: None
+        mock_urlopen.return_value = mock_response
+
+        api = YouTubeCommunityAPI()
+
+        with pytest.raises(APIError) as exc_info:
+            api.resolve_channel_handle("@unknown")
+        assert "Could not resolve channel handle" in str(exc_info.value)
+
+    @patch("post_archiver_improved.api.YouTubeCommunityAPI.resolve_channel_handle")
+    @patch("post_archiver_improved.api.make_http_request")
+    def test_get_initial_data_with_handle(self, mock_request, mock_resolve):
+        """Test get_initial_data automatically resolving handles."""
+        mock_resolve.return_value = "UC123456789012345678901"
+        mock_request.return_value = {"test": "data"}
+
+        api = YouTubeCommunityAPI()
+        result = api.get_initial_data("@testhandle")
+
+        assert result == {"test": "data"}
+        mock_resolve.assert_called_once_with("@testhandle")
+        mock_request.assert_called_once()
+
+        # Verify the browseId in the request uses the resolved channel ID
+        call_args = mock_request.call_args
+        request_data = call_args.kwargs["data"]
+        assert request_data["browseId"] == "UC123456789012345678901"
+
+    @patch("post_archiver_improved.api.make_http_request")
+    def test_get_initial_data_with_channel_id(self, mock_request):
+        """Test get_initial_data with regular channel ID (no resolution needed)."""
+        mock_request.return_value = {"test": "data"}
+
+        api = YouTubeCommunityAPI()
+        result = api.get_initial_data("UC123456789012345678901")
+
+        assert result == {"test": "data"}
+        mock_request.assert_called_once()
+
+        # Verify the browseId uses the channel ID directly
+        call_args = mock_request.call_args
+        request_data = call_args.kwargs["data"]
+        assert request_data["browseId"] == "UC123456789012345678901"
 
 
 if __name__ == "__main__":

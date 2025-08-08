@@ -341,7 +341,8 @@ def validate_channel_id(channel_id: str) -> bool:
         )
 
     if channel_id.startswith("UC") and len(channel_id) == 24:
-        return channel_id[2:].isalnum()
+        # YouTube channel IDs can contain letters, numbers, hyphens, and underscores
+        return all(c.isalnum() or c in "-_" for c in channel_id[2:])
 
     # Also support custom channel URLs
     if channel_id.startswith("c/") or channel_id.startswith("channel/"):

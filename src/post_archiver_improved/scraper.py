@@ -73,12 +73,21 @@ class CommunityPostScraper:
         if not validate_channel_id(channel_id):
             raise ValidationError(f"Invalid channel ID format: {channel_id}")
 
+        # Resolve channel handle to actual channel ID if needed
+        resolved_channel_id = channel_id
+        if channel_id.startswith("@"):
+            logger.debug(f"Resolving channel handle: {channel_id}")
+            resolved_channel_id = self.api.resolve_channel_handle(channel_id)
+            logger.info(
+                f"Resolved handle {channel_id} to channel ID: {resolved_channel_id}"
+            )
+
         logger.info(f"Starting to scrape posts for channel: {channel_id}")
         start_time = time.time()
 
         # Initialize archive data
         metadata = ArchiveMetadata(
-            channel_id=channel_id,
+            channel_id=resolved_channel_id,
             scrape_date=datetime.now().isoformat(),
             scrape_timestamp=int(datetime.now().timestamp()),
             posts_count=0,
@@ -102,7 +111,7 @@ class CommunityPostScraper:
             continuation_token = self._find_continuation_token(contents)
 
             # Process initial batch
-            posts = self._process_posts_batch(contents, channel_id)
+            posts = self._process_posts_batch(contents, resolved_channel_id)
             archive_data.posts.extend(posts)
 
             logger.info(f"Processed initial batch: {len(posts)} posts")
@@ -125,7 +134,7 @@ class CommunityPostScraper:
                     if max_posts is not None and max_posts != float("inf"):
                         remaining_posts = int(max_posts - len(archive_data.posts))
                     posts = self._process_posts_batch(
-                        contents, channel_id, max_posts=remaining_posts
+                        contents, resolved_channel_id, max_posts=remaining_posts
                     )
 
                     if not posts:
