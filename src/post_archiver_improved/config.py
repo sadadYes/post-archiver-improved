@@ -33,6 +33,7 @@ class ScrapingConfig:
     request_timeout: int = DEFAULT_TIMEOUT
     max_retries: int = DEFAULT_MAX_RETRIES
     retry_delay: float = DEFAULT_RETRY_DELAY
+    cookies_file: Optional[Path] = None
 
 
 @dataclass
@@ -62,6 +63,12 @@ class Config:
         # Ensure log_file is a Path object if specified
         if self.log_file and not isinstance(self.log_file, Path):
             self.log_file = Path(self.log_file)  # type: ignore
+
+        # Ensure cookies_file is a Path object if specified
+        if self.scraping.cookies_file and not isinstance(
+            self.scraping.cookies_file, Path
+        ):
+            self.scraping.cookies_file = Path(self.scraping.cookies_file)  # type: ignore
 
 
 def get_default_config() -> Config:
@@ -141,6 +148,8 @@ def save_config_to_file(config: Config, config_path: Path) -> bool:
             data["output"]["output_dir"] = str(data["output"]["output_dir"])
         if data["log_file"]:
             data["log_file"] = str(data["log_file"])
+        if data["scraping"]["cookies_file"]:
+            data["scraping"]["cookies_file"] = str(data["scraping"]["cookies_file"])
 
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -223,6 +232,7 @@ def update_config_from_args(config: Config, **kwargs: Any) -> Config:
         "max_comments_per_post",
         "max_replies_per_comment",
         "download_images",
+        "cookies_file",
     ]:
         if key in kwargs and kwargs[key] is not None:
             scraping_updates[key] = kwargs[key]

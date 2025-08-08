@@ -32,7 +32,11 @@ class YouTubeCommunityAPI:
     """
 
     def __init__(
-        self, timeout: int = 30, max_retries: int = 3, retry_delay: float = 1.0
+        self,
+        timeout: int = 30,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        cookies_file: Optional[str] = None,
     ):
         """
         Initialize the YouTube API client.
@@ -41,12 +45,22 @@ class YouTubeCommunityAPI:
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts
             retry_delay: Delay between retries in seconds
+            cookies_file: Path to Netscape format cookie file for authentication
         """
         self.base_url = YOUTUBE_BROWSE_ENDPOINT
         self.next_url = YOUTUBE_NEXT_ENDPOINT
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+
+        # Load cookies if provided
+        self.cookies = None
+        if cookies_file:
+            from pathlib import Path
+
+            from .utils import load_cookies_from_netscape_file
+
+            self.cookies = load_cookies_from_netscape_file(Path(cookies_file))
 
         self.headers = {
             "Content-Type": "application/json",
@@ -92,6 +106,7 @@ class YouTubeCommunityAPI:
                 timeout=self.timeout,
                 max_retries=self.max_retries,
                 retry_delay=self.retry_delay,
+                cookies=self.cookies,
             )
 
             # Check for API-level errors

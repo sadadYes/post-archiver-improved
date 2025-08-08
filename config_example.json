@@ -7,7 +7,8 @@
     "download_images": false,
     "request_timeout": 30,
     "max_retries": 3,
-    "retry_delay": 1.0
+    "retry_delay": 1.0,
+    "cookies_file": null
   },
   "output": {
     "output_dir": null,

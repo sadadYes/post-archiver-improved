@@ -36,6 +36,32 @@ class TestYouTubeCommunityAPI:
         assert api.max_retries == 5
         assert api.retry_delay == 2.0
 
+    def test_api_initialization_with_cookies(self, temp_dir):
+        """Test API client initialization with cookie file."""
+        # Create a mock cookie file
+        cookies_file = temp_dir / "cookies.txt"
+        cookie_content = (
+            """.youtube.com\tTRUE\t/\tFALSE\t1735689600\tSIDCC\ttest_value"""
+        )
+        cookies_file.write_text(cookie_content)
+
+        api = YouTubeCommunityAPI(cookies_file=str(cookies_file))
+
+        assert api.cookies is not None
+        assert api.cookies["SIDCC"] == "test_value"
+
+    def test_api_initialization_with_nonexistent_cookies(self):
+        """Test API client initialization with non-existent cookie file."""
+        api = YouTubeCommunityAPI(cookies_file="/path/to/nonexistent/cookies.txt")
+
+        assert api.cookies is None
+
+    def test_api_initialization_without_cookies(self):
+        """Test API client initialization without cookie file."""
+        api = YouTubeCommunityAPI()
+
+        assert api.cookies is None
+
     def test_api_headers_content(self):
         """Test that API headers contain required fields."""
         api = YouTubeCommunityAPI()
@@ -247,6 +273,38 @@ class TestAPIRequestBuilding:
             call_args = mock_request.call_args
             assert call_args[1]["max_retries"] == 5
             assert call_args[1]["retry_delay"] == 2.5
+
+    def test_request_with_cookies(self, temp_dir):
+        """Test that cookies are passed to requests when available."""
+        # Create a mock cookie file
+        cookies_file = temp_dir / "cookies.txt"
+        cookie_content = (
+            """.youtube.com\tTRUE\t/\tFALSE\t1735689600\tSIDCC\ttest_cookie_value"""
+        )
+        cookies_file.write_text(cookie_content)
+
+        api = YouTubeCommunityAPI(cookies_file=str(cookies_file))
+
+        with patch("post_archiver_improved.api.make_http_request") as mock_request:
+            mock_request.return_value = {}
+
+            api.get_initial_data("UC123456789")
+
+            call_args = mock_request.call_args
+            assert call_args[1]["cookies"] is not None
+            assert call_args[1]["cookies"]["SIDCC"] == "test_cookie_value"
+
+    def test_request_without_cookies(self):
+        """Test that no cookies are passed when not available."""
+        api = YouTubeCommunityAPI()
+
+        with patch("post_archiver_improved.api.make_http_request") as mock_request:
+            mock_request.return_value = {}
+
+            api.get_initial_data("UC123456789")
+
+            call_args = mock_request.call_args
+            assert call_args[1]["cookies"] is None
 
 
 class TestAPIResponseHandling:

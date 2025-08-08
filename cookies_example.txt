@@ -1,0 +1,31 @@
+# Netscape HTTP Cookie File
+# This is a generated file!  Do not edit.
+#
+# Example cookie file for YouTube Community Post Archiver
+# Replace the values below with your actual cookies from a logged-in YouTube session
+#
+# To get your cookies:
+# 1. Log into YouTube in your browser
+# 2. Use a browser extension like "cookies.txt" to export cookies
+# 3. Save cookies for youtube.com and google.com domains
+# 4. Replace this file with your exported cookies
+#
+# Format: domain | flag | path | secure | expiration | name | value
+#
+# Common YouTube/Google cookies that may be needed:
+.youtube.com	TRUE	/	FALSE	1735689600	SIDCC	REPLACE_WITH_YOUR_SIDCC_VALUE
+.youtube.com	TRUE	/	TRUE	1735689600	__Secure-1PSIDCC	REPLACE_WITH_YOUR_SECURE_PSIDCC_VALUE
+.youtube.com	TRUE	/	FALSE	1735689600	VISITOR_INFO1_LIVE	REPLACE_WITH_YOUR_VISITOR_INFO
+.google.com	TRUE	/	FALSE	1735689600	NID	REPLACE_WITH_YOUR_NID_VALUE
+.google.com	TRUE	/	FALSE	1735689600	1P_JAR	REPLACE_WITH_YOUR_1P_JAR_VALUE
+.youtube.com	TRUE	/	FALSE	1735689600	PREF	REPLACE_WITH_YOUR_PREF_VALUE
+.youtube.com	TRUE	/	TRUE	1735689600	__Secure-1PAPISID	REPLACE_WITH_YOUR_SECURE_PAPISID
+.youtube.com	TRUE	/	TRUE	1735689600	__Secure-3PAPISID	REPLACE_WITH_YOUR_SECURE_3PAPISID
+.youtube.com	TRUE	/	FALSE	1735689600	SAPISID	REPLACE_WITH_YOUR_SAPISID
+.youtube.com	TRUE	/	FALSE	1735689600	APISID	REPLACE_WITH_YOUR_APISID
+.youtube.com	TRUE	/	FALSE	1735689600	HSID	REPLACE_WITH_YOUR_HSID
+.youtube.com	TRUE	/	FALSE	1735689600	SSID	REPLACE_WITH_YOUR_SSID
+.youtube.com	TRUE	/	FALSE	1735689600	SID	REPLACE_WITH_YOUR_SID
+#
+# WARNING: Keep this file secure! It contains your authentication data.
+# Do not share this file or commit it to version control.

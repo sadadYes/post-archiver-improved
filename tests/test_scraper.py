@@ -47,6 +47,52 @@ class TestCommunityPostScraper:
 
         assert scraper.comment_extractor is None
 
+    def test_scraper_initialization_with_cookies(self, temp_dir):
+        """Test scraper initialization with cookie file."""
+        # Create a mock cookie file
+        cookies_file = temp_dir / "cookies.txt"
+        cookie_content = (
+            """.youtube.com\tTRUE\t/\tFALSE\t1735689600\tSIDCC\ttest_value"""
+        )
+        cookies_file.write_text(cookie_content)
+
+        config = Config(
+            scraping=ScrapingConfig(extract_comments=False, cookies_file=cookies_file),
+            output=OutputConfig(),
+        )
+
+        with patch(
+            "post_archiver_improved.scraper.YouTubeCommunityAPI"
+        ) as mock_api_class:
+            CommunityPostScraper(config)
+
+            # Verify API was initialized with cookie file path
+            mock_api_class.assert_called_once_with(
+                timeout=config.scraping.request_timeout,
+                max_retries=config.scraping.max_retries,
+                retry_delay=config.scraping.retry_delay,
+                cookies_file=str(cookies_file),
+            )
+
+    def test_scraper_initialization_without_cookies(self):
+        """Test scraper initialization without cookie file."""
+        config = Config(
+            scraping=ScrapingConfig(extract_comments=False), output=OutputConfig()
+        )
+
+        with patch(
+            "post_archiver_improved.scraper.YouTubeCommunityAPI"
+        ) as mock_api_class:
+            CommunityPostScraper(config)
+
+            # Verify API was initialized without cookie file
+            mock_api_class.assert_called_once_with(
+                timeout=config.scraping.request_timeout,
+                max_retries=config.scraping.max_retries,
+                retry_delay=config.scraping.retry_delay,
+                cookies_file=None,
+            )
+
     @patch("post_archiver_improved.scraper.YouTubeCommunityAPI")
     def test_scraper_api_configuration(self, mock_api_class, sample_config):
         """Test that API is configured with correct parameters."""
@@ -60,6 +106,7 @@ class TestCommunityPostScraper:
             timeout=sample_config.scraping.request_timeout,
             max_retries=sample_config.scraping.max_retries,
             retry_delay=sample_config.scraping.retry_delay,
+            cookies_file=None,
         )
 
 
