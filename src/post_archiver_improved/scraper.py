@@ -37,10 +37,15 @@ class CommunityPostScraper:
             config: Configuration object with scraping parameters
         """
         self.config = config
+        cookies_file_path = None
+        if config.scraping.cookies_file:
+            cookies_file_path = str(config.scraping.cookies_file)
+
         self.api = YouTubeCommunityAPI(
             timeout=config.scraping.request_timeout,
             max_retries=config.scraping.max_retries,
             retry_delay=config.scraping.retry_delay,
+            cookies_file=cookies_file_path,
         )
         self.post_extractor = PostExtractor()
         self.comment_extractor = (

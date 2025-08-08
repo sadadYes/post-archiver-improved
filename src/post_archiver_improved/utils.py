@@ -5,6 +5,7 @@ This module contains helper functions for HTTP requests, file operations,
 and other common tasks.
 """
 
+import hashlib
 import json
 import re
 import time
@@ -18,6 +19,92 @@ from .exceptions import FileOperationError, NetworkError, RateLimitError
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+def load_cookies_from_netscape_file(cookies_file: Path) -> Optional[Dict[str, str]]:
+    """
+    Load cookies from a Netscape format cookie file.
+
+    Args:
+        cookies_file: Path to the Netscape format cookie file
+
+    Returns:
+        Dictionary of cookie name-value pairs, or None if loading failed
+    """
+    try:
+        if not cookies_file.exists():
+            logger.warning(f"Cookie file not found: {cookies_file}")
+            return None
+
+        cookies = {}
+
+        with open(cookies_file, encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+
+                # Skip empty lines and comments
+                if not line or line.startswith("#"):
+                    continue
+
+                # Parse Netscape cookie format:
+                # domain flag path secure expiration name value
+                parts = line.split("\t")
+
+                if len(parts) < 7:
+                    logger.warning(f"Invalid cookie format at line {line_num}: {line}")
+                    continue
+
+                domain, flag, path, secure, expiration, name, value = parts[:7]
+
+                # For YouTube, we mainly care about cookies for *.youtube.com
+                if "youtube.com" in domain or "google.com" in domain:
+                    cookies[name] = value
+                    logger.debug(f"Loaded cookie: {name} for domain {domain}")
+
+        if cookies:
+            logger.info(f"Loaded {len(cookies)} cookies from {cookies_file}")
+            return cookies
+        else:
+            logger.warning("No YouTube/Google cookies found in cookie file")
+            return None
+
+    except Exception as e:
+        logger.error(f"Failed to load cookies from {cookies_file}: {e}")
+        return None
+
+
+def _format_cookie_header(cookies: Dict[str, str]) -> str:
+    """
+    Format cookies dictionary into a Cookie header string.
+
+    Args:
+        cookies: Dictionary of cookie name-value pairs
+
+    Returns:
+        Formatted cookie header string
+    """
+    return "; ".join(f"{name}={value}" for name, value in cookies.items())
+
+
+def _generate_sapisid_authorization(sapisid: str, origin: str) -> str:
+    """
+    Generate YouTube's SAPISID-based authorization header.
+
+    This implements YouTube's authentication protocol for accessing
+    member-only content and authenticated API endpoints.
+
+    Args:
+        sapisid: The SAPISID cookie value
+        origin: The origin URL (e.g., "https://www.youtube.com")
+
+    Returns:
+        Authorization header value in format "SAPISIDHASH {timestamp}_{hash}"
+    """
+    timestamp = str(int(time.time()))
+    # Create hash of timestamp, sapisid, and origin
+    hash_input = f"{timestamp} {sapisid} {origin}"
+    hash_value = hashlib.sha1(hash_input.encode()).hexdigest()
+    return f"SAPISIDHASH {timestamp}_{hash_value}"
 
 
 def _validate_url_scheme(url: str) -> None:
@@ -45,6 +132,7 @@ def make_http_request(
     timeout: int = 30,
     max_retries: int = 3,
     retry_delay: float = 1.0,
+    cookies: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """
     Make HTTP requests with retry logic and proper error handling.
@@ -57,6 +145,7 @@ def make_http_request(
         timeout: Request timeout in seconds
         max_retries: Maximum number of retry attempts
         retry_delay: Delay between retries in seconds
+        cookies: Dictionary of cookies to include in the request
 
     Returns:
         Dictionary containing the JSON response
@@ -67,6 +156,25 @@ def make_http_request(
     """
     if headers is None:
         headers = {}
+
+    # Add cookies to headers if provided
+    if cookies:
+        cookie_header = _format_cookie_header(cookies)
+        headers["Cookie"] = cookie_header
+        logger.debug(f"Added {len(cookies)} cookies to request")
+
+        # Add SAPISID-based authorization for YouTube API access
+        if "SAPISID" in cookies:
+            try:
+                parsed_url = urlparse(url)
+                origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
+                auth_header = _generate_sapisid_authorization(
+                    cookies["SAPISID"], origin
+                )
+                headers["Authorization"] = auth_header
+                logger.debug("Added SAPISID-based authorization header")
+            except Exception as e:
+                logger.warning(f"Failed to generate SAPISID authorization: {e}")
 
     attempt = 0
     last_exception: Optional[Exception] = None

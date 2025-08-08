@@ -19,6 +19,7 @@ from post_archiver_improved.utils import (
     create_backup_filename,
     download_image,
     format_file_size,
+    load_cookies_from_netscape_file,
     make_http_request,
     sanitize_filename,
     validate_channel_id,
@@ -526,6 +527,231 @@ class TestUtilityIntegration:
         # Verify backup has different name
         assert original_file.name != backup_file.name
         assert "backup" in backup_file.name
+
+
+class TestLoadCookiesFromNetscapeFile:
+    """Test load_cookies_from_netscape_file function."""
+
+    def test_load_valid_cookies(self, temp_dir):
+        """Test loading valid Netscape format cookies."""
+        cookies_file = temp_dir / "cookies.txt"
+
+        # Create a sample Netscape format cookie file
+        cookie_content = """# Netscape HTTP Cookie File
+# This is a generated file!  Do not edit.
+
+.youtube.com\tTRUE\t/\tFALSE\t1735689600\tSIDCC\tAA1234567890
+.youtube.com\tTRUE\t/\tTRUE\t1735689600\t__Secure-1PSIDCC\tBB1234567890
+.google.com\tTRUE\t/\tFALSE\t1735689600\tNID\tCC1234567890
+example.com\tTRUE\t/\tFALSE\t1735689600\tother_cookie\tignored
+"""
+        cookies_file.write_text(cookie_content)
+
+        cookies = load_cookies_from_netscape_file(cookies_file)
+
+        assert cookies is not None
+        assert len(cookies) == 3
+        assert cookies["SIDCC"] == "AA1234567890"
+        assert cookies["__Secure-1PSIDCC"] == "BB1234567890"
+        assert cookies["NID"] == "CC1234567890"
+        assert "other_cookie" not in cookies  # Should ignore non-YouTube/Google cookies
+
+    def test_load_cookies_with_comments_and_empty_lines(self, temp_dir):
+        """Test loading cookies file with comments and empty lines."""
+        cookies_file = temp_dir / "cookies.txt"
+
+        cookie_content = """# This is a comment
+# Another comment
+
+.youtube.com\tTRUE\t/\tFALSE\t1735689600\tSIDCC\tvalue1
+
+# More comments
+.google.com\tTRUE\t/\tFALSE\t1735689600\tNID\tvalue2
+
+
+"""
+        cookies_file.write_text(cookie_content)
+
+        cookies = load_cookies_from_netscape_file(cookies_file)
+
+        assert cookies is not None
+        assert len(cookies) == 2
+        assert cookies["SIDCC"] == "value1"
+        assert cookies["NID"] == "value2"
+
+    def test_load_cookies_invalid_format(self, temp_dir):
+        """Test handling of invalid cookie format."""
+        cookies_file = temp_dir / "cookies.txt"
+
+        cookie_content = """# Valid cookie
+.youtube.com\tTRUE\t/\tFALSE\t1735689600\tvalid_cookie\tvalue1
+# Invalid cookie (missing fields)
+.youtube.com\tTRUE\t/\tinvalid_line
+# Another valid cookie
+.google.com\tTRUE\t/\tFALSE\t1735689600\tanother_cookie\tvalue2
+"""
+        cookies_file.write_text(cookie_content)
+
+        cookies = load_cookies_from_netscape_file(cookies_file)
+
+        # Should still load valid cookies and skip invalid ones
+        assert cookies is not None
+        assert len(cookies) == 2
+        assert cookies["valid_cookie"] == "value1"
+        assert cookies["another_cookie"] == "value2"
+
+    def test_load_cookies_no_youtube_cookies(self, temp_dir):
+        """Test loading cookies file with no YouTube/Google cookies."""
+        cookies_file = temp_dir / "cookies.txt"
+
+        cookie_content = """example.com\tTRUE\t/\tFALSE\t1735689600\tcookie1\tvalue1
+other.com\tTRUE\t/\tFALSE\t1735689600\tcookie2\tvalue2
+"""
+        cookies_file.write_text(cookie_content)
+
+        cookies = load_cookies_from_netscape_file(cookies_file)
+
+        # Should return None when no YouTube/Google cookies are found
+        assert cookies is None
+
+    def test_load_cookies_file_not_found(self, temp_dir):
+        """Test handling of non-existent cookie file."""
+        cookies_file = temp_dir / "nonexistent.txt"
+
+        cookies = load_cookies_from_netscape_file(cookies_file)
+
+        assert cookies is None
+
+    def test_load_cookies_file_read_error(self, temp_dir):
+        """Test handling of file read errors."""
+        cookies_file = temp_dir / "cookies.txt"
+        cookies_file.write_text("content")
+        cookies_file.chmod(0o000)  # Remove all permissions
+
+        try:
+            cookies = load_cookies_from_netscape_file(cookies_file)
+            assert cookies is None
+        finally:
+            cookies_file.chmod(0o644)  # Restore permissions for cleanup
+
+
+class TestMakeHttpRequestWithCookies:
+    """Test make_http_request function with cookie support."""
+
+    @patch("post_archiver_improved.utils.urlopen")
+    def test_request_with_cookies(self, mock_urlopen):
+        """Test HTTP request with cookies."""
+        mock_response = Mock()
+        mock_response.read.return_value = json.dumps({"success": True}).encode("utf-8")
+        mock_response.status = 200
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        cookies = {"SIDCC": "value1", "NID": "value2", "__Secure-1PSIDCC": "value3"}
+
+        result = make_http_request("https://example.com/api", cookies=cookies)
+
+        assert result == {"success": True}
+
+        # Check that cookies were added to headers
+        call_args = mock_urlopen.call_args[0][0]
+        cookie_header = call_args.get_header("Cookie")
+        assert cookie_header is not None
+
+        # Check that all cookies are present in the header
+        assert "SIDCC=value1" in cookie_header
+        assert "NID=value2" in cookie_header
+        assert "__Secure-1PSIDCC=value3" in cookie_header
+
+    @patch("post_archiver_improved.utils.urlopen")
+    def test_request_without_cookies(self, mock_urlopen):
+        """Test HTTP request without cookies (existing behavior)."""
+        mock_response = Mock()
+        mock_response.read.return_value = json.dumps({"success": True}).encode("utf-8")
+        mock_response.status = 200
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        result = make_http_request("https://example.com/api")
+
+        assert result == {"success": True}
+
+        # Check that no cookie header was added
+        call_args = mock_urlopen.call_args[0][0]
+        cookie_header = call_args.get_header("Cookie")
+        assert cookie_header is None
+
+    @patch("post_archiver_improved.utils.urlopen")
+    def test_request_with_empty_cookies(self, mock_urlopen):
+        """Test HTTP request with empty cookies dictionary."""
+        mock_response = Mock()
+        mock_response.read.return_value = json.dumps({"success": True}).encode("utf-8")
+        mock_response.status = 200
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        result = make_http_request("https://example.com/api", cookies={})
+
+        assert result == {"success": True}
+
+        # Check that no cookie header was added for empty cookies
+        call_args = mock_urlopen.call_args[0][0]
+        cookie_header = call_args.get_header("Cookie")
+        assert cookie_header is None
+
+    @patch("post_archiver_improved.utils.urlopen")
+    def test_request_cookies_with_existing_headers(self, mock_urlopen):
+        """Test HTTP request with both cookies and existing headers."""
+        mock_response = Mock()
+        mock_response.read.return_value = json.dumps({"success": True}).encode("utf-8")
+        mock_response.status = 200
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        headers = {"Authorization": "Bearer token"}
+        cookies = {"session": "abc123"}
+
+        result = make_http_request(
+            "https://example.com/api", headers=headers, cookies=cookies
+        )
+
+        assert result == {"success": True}
+
+        # Check that both custom headers and cookies are present
+        call_args = mock_urlopen.call_args[0][0]
+        assert call_args.get_header("Authorization") == "Bearer token"
+        assert call_args.get_header("Cookie") == "session=abc123"
+
+
+class TestCookieIntegration:
+    """Test integration of cookie functionality with other components."""
+
+    def test_cookie_header_formatting(self):
+        """Test cookie header string formatting."""
+        from post_archiver_improved.utils import _format_cookie_header
+
+        cookies = {"cookie1": "value1", "cookie2": "value2", "cookie3": "value3"}
+
+        header = _format_cookie_header(cookies)
+
+        # Check that all cookies are present
+        assert "cookie1=value1" in header
+        assert "cookie2=value2" in header
+        assert "cookie3=value3" in header
+
+        # Check format (should be semicolon-separated)
+        assert header.count(";") == 2
+
+    def test_cookie_header_empty(self):
+        """Test cookie header formatting with empty cookies."""
+        from post_archiver_improved.utils import _format_cookie_header
+
+        header = _format_cookie_header({})
+        assert header == ""
+
+    def test_cookie_header_single_cookie(self):
+        """Test cookie header formatting with single cookie."""
+        from post_archiver_improved.utils import _format_cookie_header
+
+        cookies = {"single": "value"}
+        header = _format_cookie_header(cookies)
+        assert header == "single=value"
 
 
 if __name__ == "__main__":

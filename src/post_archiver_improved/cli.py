@@ -88,6 +88,12 @@ def create_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Download images from posts to local directory",
     )
+    scraping_group.add_argument(
+        "--cookies",
+        type=Path,
+        metavar="FILE",
+        help="Path to Netscape format cookie file for accessing members-only posts",
+    )
 
     # Output options
     output_group = parser.add_argument_group("Output Options")
@@ -320,6 +326,7 @@ def main() -> int:
             "max_comments_per_post": args.max_comments,
             "max_replies_per_comment": args.max_replies,
             "download_images": args.download_images,
+            "cookies_file": args.cookies,
             "output_dir": args.output,
             "log_file": args.log_file,
         }

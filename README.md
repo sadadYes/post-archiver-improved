@@ -77,6 +77,16 @@ post-archiver UC5CwaMl1eIgY8h02uZw7u8A \
   --verbose
 ```
 
+Archive members-only content with cookies:
+```bash
+post-archiver UC5CwaMl1eIgY8h02uZw7u8A \
+  --comments \
+  --download-images \
+  --cookies ./cookies.txt \
+  --output ./archive \
+  --verbose
+```
+
 With custom configuration:
 ```bash
 post-archiver UC5CwaMl1eIgY8h02uZw7u8A \
@@ -96,6 +106,30 @@ The tool accepts various channel ID formats:
 - **Custom URL**: `https://youtube.com/c/channelname`
 - **Handle URL**: `https://youtube.com/@username`
 
+### Accessing Members-Only Content
+
+To access members-only posts, you'll need to provide authentication cookies from a logged-in YouTube session:
+
+1. **Export Cookies**: Use a browser extension or tool to export cookies in Netscape format
+   - Recommended: [Get-cookies.txt-LOCALLY](https://github.com/kairi003/Get-cookies.txt-Locally) extension for Chrome/Firefox
+   - Export cookies for `youtube.com` domains
+
+2. **Use Cookie File**: Pass the cookie file to the archiver
+   ```bash
+   post-archiver UC5CwaMl1eIgY8h02uZw7u8A --cookies ./cookies.txt
+   ```
+
+3. **Cookie File Format**: The tool expects Netscape HTTP Cookie File format:
+   ```
+   # Netscape HTTP Cookie File
+   .youtube.com	TRUE	/	FALSE	1735689600	SIDCC	cookie_value
+   .google.com	TRUE	/	TRUE	1735689600	__Secure-1PSIDCC	secure_value
+   ```
+
+**Security Note**: Cookie files contain sensitive authentication data. Keep them secure and never share them publicly.
+
+**Important**: Cookies must be from a YouTube account that has membership access to the target channel.
+
 ## Configuration
 
 ### Command Line Options
@@ -106,6 +140,7 @@ The tool accepts various channel ID formats:
 - `--max-comments N` - Maximum comments per post (default: 100)
 - `--max-replies N` - Maximum replies per comment (default: 200)
 - `-i, --download-images` - Download images to local directory
+- `--cookies FILE` - Path to Netscape format cookie file for accessing members-only posts
 
 #### Output Options
 - `-o, --output DIR` - Output directory
