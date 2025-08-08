@@ -109,12 +109,92 @@ class YouTubeCommunityAPI:
             logger.error(f"Unexpected error during API request: {e}")
             raise APIError(f"Unexpected API error: {e}") from e
 
+    def resolve_channel_handle(self, handle: str) -> str:
+        """
+        Resolve a channel handle (@username) to a channel ID.
+
+        Args:
+            handle: Channel handle (e.g., '@username')
+
+        Returns:
+            Channel ID (e.g., 'UC123...')
+
+        Raises:
+            APIError: If handle resolution fails
+            ValidationError: If handle is invalid
+        """
+        if not handle.startswith("@"):
+            raise ValidationError(f"Invalid handle format: {handle}")
+
+        logger.debug(f"Resolving channel handle: {handle}")
+
+        try:
+            # Construct the channel URL from the handle
+            channel_url = f"{YOUTUBE_BASE_URL}/{handle}"
+            logger.debug(f"Requesting channel page: {channel_url}")
+
+            # Make a request to the channel page
+            headers = {
+                "User-Agent": DEFAULT_USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Connection": "keep-alive",
+            }
+
+            from urllib.request import Request, urlopen
+
+            request = Request(channel_url, headers=headers)
+
+            with urlopen(request, timeout=self.timeout) as response:  # nosec B310
+                if response.status != 200:
+                    raise APIError(f"Channel page returned status {response.status}")
+
+                # Read and decode the response
+                content = response.read()
+                if response.info().get("Content-Encoding") == "gzip":
+                    import gzip
+
+                    content = gzip.decompress(content)
+
+                html_content = content.decode("utf-8", errors="ignore")
+
+            # Look for the canonical channel URL which contains the channel ID
+            import re
+
+            patterns = [
+                r'"channelId":"(UC[a-zA-Z0-9_-]{22})"',
+                r'"browseId":"(UC[a-zA-Z0-9_-]{22})"',
+                r'<link[^>]*rel="canonical"[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
+                r'<meta[^>]*property="og:url"[^>]*content="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
+                r'"externalId":"(UC[a-zA-Z0-9_-]{22})"',
+            ]
+
+            for pattern in patterns:
+                matches = re.findall(pattern, html_content)
+                if matches:
+                    channel_id = matches[0]
+                    logger.info(f"Resolved handle {handle} to channel ID: {channel_id}")
+                    return str(channel_id)
+
+            # If no patterns matched, try a different approach with the API
+            logger.warning(
+                f"Could not resolve handle {handle} from HTML, trying alternative method"
+            )
+            raise APIError(f"Could not resolve channel handle {handle} to channel ID")
+
+        except Exception as e:
+            if isinstance(e, (APIError, ValidationError)):
+                raise
+            logger.error(f"Error resolving channel handle {handle}: {e}")
+            raise APIError(f"Failed to resolve channel handle {handle}: {e}") from e
+
     def get_initial_data(self, channel_id: str) -> Dict[str, Any]:
         """
         Get initial community tab data for a channel.
 
         Args:
-            channel_id: YouTube channel ID
+            channel_id: YouTube channel ID or handle (@username)
 
         Returns:
             Initial data response
@@ -128,9 +208,16 @@ class YouTubeCommunityAPI:
 
         logger.info(f"Fetching initial data for channel: {channel_id}")
 
+        # Resolve handle to channel ID if needed
+        browse_id = channel_id
+        if channel_id.startswith("@"):
+            logger.debug(f"Channel ID is a handle, resolving: {channel_id}")
+            browse_id = self.resolve_channel_handle(channel_id)
+            logger.debug(f"Resolved to channel ID: {browse_id}")
+
         payload = {
             "context": self.client_context,
-            "browseId": channel_id,
+            "browseId": browse_id,
             "params": COMMUNITY_TAB_PARAMS,  # Base64 encoded parameters for community tab
         }
 
