@@ -459,6 +459,14 @@ class YouTubeCommunityAPI:
 
             request = Request(post_url, headers=headers)
 
+            # Add cookies to the request if available
+            if self.cookies:
+                cookie_header = "; ".join(
+                    [f"{name}={value}" for name, value in self.cookies.items()]
+                )
+                request.add_header("Cookie", cookie_header)
+                logger.debug(f"Added {len(self.cookies)} cookies to post page request")
+
             with urlopen(request, timeout=self.timeout) as response:  # nosec B310
                 if response.status != 200:
                     logger.warning(f"Post page returned status {response.status}")
