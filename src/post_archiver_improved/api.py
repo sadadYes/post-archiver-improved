@@ -371,6 +371,135 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get post detail data: {e}")
             raise APIError(f"Failed to get post detail data: {e}") from e
 
+    def get_individual_post_data(self, post_id: str) -> Dict[str, Any]:
+        """
+        Get data for an individual post by post ID.
+
+        This method attempts to fetch post data using the post ID directly.
+        If that fails, it tries to extract the channel ID first.
+
+        Args:
+            post_id: YouTube post ID
+
+        Returns:
+            Post data response
+
+        Raises:
+            APIError: If the request fails
+            ValidationError: If post_id is invalid
+        """
+        if not post_id:
+            raise ValidationError("Post ID cannot be empty")
+
+        logger.debug(f"Fetching individual post data for post: {post_id}")
+
+        try:
+            # First, try to get the channel ID from the post URL
+            channel_id = self._extract_channel_id_from_post(post_id)
+
+            if channel_id:
+                logger.debug(f"Found channel ID {channel_id} for post {post_id}")
+                # Use the existing post detail method if we have channel ID
+                return self.get_post_detail_data(channel_id, post_id)
+            else:
+                # Fallback: try direct post access with different parameter structure
+                logger.debug("Channel ID not found, trying direct post access")
+
+                post_bytes = post_id.encode("utf-8")
+
+                # Try a different parameter structure that works for individual posts
+                params_data = (
+                    b"\x08\x01\x12"
+                    + bytes([len(post_bytes)])
+                    + post_bytes
+                    + b"\x18\x01"  # Additional parameters for individual post access
+                )
+
+                params = base64.b64encode(params_data).decode("ascii")
+
+                payload = {
+                    "context": self.client_context,
+                    "browseId": "FEpost_detail",
+                    "params": params,
+                }
+
+                response = self._make_request(self.base_url, payload)
+                logger.debug("Successfully fetched individual post data")
+                return response
+
+        except APIError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to get individual post data: {e}")
+            raise APIError(f"Failed to get individual post data: {e}") from e
+
+    def _extract_channel_id_from_post(self, post_id: str) -> Optional[str]:
+        """
+        Extract channel ID from a post by visiting the post URL.
+
+        Args:
+            post_id: YouTube post ID
+
+        Returns:
+            Channel ID if found, None otherwise
+        """
+        try:
+            post_url = f"https://www.youtube.com/post/{post_id}"
+            logger.debug(f"Attempting to extract channel ID from post URL: {post_url}")
+
+            headers = {
+                "User-Agent": DEFAULT_USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Connection": "keep-alive",
+            }
+
+            from urllib.request import Request, urlopen
+
+            request = Request(post_url, headers=headers)
+
+            with urlopen(request, timeout=self.timeout) as response:  # nosec B310
+                if response.status != 200:
+                    logger.warning(f"Post page returned status {response.status}")
+                    return None
+
+                # Read and decode the response
+                content = response.read()
+                if response.info().get("Content-Encoding") == "gzip":
+                    import gzip
+
+                    content = gzip.decompress(content)
+
+                html_content = content.decode("utf-8", errors="ignore")
+
+            # Look for the channel ID in the HTML
+            import re
+
+            patterns = [
+                r'"channelId":"(UC[a-zA-Z0-9_-]{22})"',
+                r'"browseId":"(UC[a-zA-Z0-9_-]{22})"',
+                r'"externalId":"(UC[a-zA-Z0-9_-]{22})"',
+                r'<link[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
+                r'"webCommandMetadata":{"url":"/channel/(UC[a-zA-Z0-9_-]{22})"',
+            ]
+
+            for pattern in patterns:
+                matches = re.findall(pattern, html_content)
+                if matches:
+                    channel_id = str(matches[0])
+                    logger.debug(f"Extracted channel ID from post page: {channel_id}")
+                    return channel_id
+
+            logger.warning(
+                f"Could not extract channel ID from post page for post {post_id}"
+            )
+            return None
+
+        except Exception as e:
+            logger.warning(f"Error extracting channel ID from post {post_id}: {e}")
+            return None
+
     def validate_response(
         self, response: Any, expected_keys: Optional[list[str]] = None
     ) -> bool:

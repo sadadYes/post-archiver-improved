@@ -64,6 +64,16 @@ Archive with images:
 post-archiver UC5CwaMl1eIgY8h02uZw7u8A --download-images
 ```
 
+Archive a single post by post ID:
+```bash
+post-archiver UgkxMVl0vgxzNvE3I52s0oKlEHO3KyfocebU --comments --download-images
+```
+
+Archive a single post by URL:
+```bash
+post-archiver "https://www.youtube.com/post/UgkxMVl0vgxzNvE3I52s0oKlEHO3KyfocebU" --comments --download-images
+```
+
 ### Advanced Usage
 
 Full archival with all features:
@@ -105,6 +115,15 @@ The tool accepts various channel ID formats:
 - **Channel URL**: `https://youtube.com/channel/UC5CwaMl1eIgY8h02uZw7u8A`
 - **Custom URL**: `https://youtube.com/c/channelname`
 - **Handle URL**: `https://youtube.com/@username`
+
+### Individual Post Formats
+
+You can also archive individual posts by providing:
+
+- **Post ID**: `UgkxMVl0vgxzNvE3I52s0oKlEHO3KyfocebU`
+- **Post URL**: `https://www.youtube.com/post/UgkxMVl0vgxzNvE3I52s0oKlEHO3KyfocebU`
+
+When archiving individual posts, the tool automatically extracts the channel information and creates an archive containing just that specific post.
 
 ### Accessing Members-Only Content
 

@@ -29,7 +29,7 @@ from .exceptions import (
 from .logging_config import setup_logging
 from .output import OutputManager
 from .scraper import CommunityPostScraper
-from .utils import format_file_size, validate_channel_id
+from .utils import format_file_size, is_post_url_or_id, validate_channel_id
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -53,7 +53,8 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
     # Required arguments
     parser.add_argument(
-        "channel_id", help="YouTube channel ID, handle (@username), or channel URL"
+        "target",
+        help="YouTube channel ID, handle (@username), channel URL, post URL, or post ID",
     )
 
     # Scraping options
@@ -210,9 +211,18 @@ def print_summary(archive_data: Any, output_path: Path, args: Any) -> None:
     posts = archive_data.posts
     metadata = archive_data.metadata
 
-    print(
-        f"\n✓ Successfully scraped {len(posts)} posts from channel {metadata.channel_id}"
-    )
+    # Check if this was an individual post or channel scrape
+    is_individual_post = len(posts) == 1 and hasattr(args, "target")
+
+    if is_individual_post:
+        print(f"\n✓ Successfully scraped individual post: {posts[0].post_id}")
+        if posts[0].author.name:
+            print(f"✓ Author: {posts[0].author.name}")
+    else:
+        print(
+            f"\n✓ Successfully scraped {len(posts)} posts from channel {metadata.channel_id}"
+        )
+
     print(f"✓ Results saved to: {output_path}")
 
     if output_path.exists():
@@ -246,7 +256,11 @@ def print_summary(archive_data: Any, output_path: Path, args: Any) -> None:
                 )
                 print(f"✓ Images saved to: {images_dir}")
         else:
-            print("✓ No images found in the scraped posts")
+            print(
+                "✓ No images found in the scraped posts"
+                if not is_individual_post
+                else "✓ No images found in the post"
+            )
 
 
 def handle_error(error: Exception, logger: Any) -> int:
@@ -311,56 +325,107 @@ def main() -> int:
         logger.info(f"Post Archiver Improved v{__version__}")
         logger.debug(f"Arguments: {vars(args)}")
 
-        # Validate and normalize channel ID
-        channel_id = normalize_channel_id(args.channel_id)
-        if not validate_channel_id(channel_id):
-            raise ValidationError(f"Invalid channel ID format: {args.channel_id}")
+        # Check if input is a post URL/ID or channel ID
+        is_post, post_id = is_post_url_or_id(args.target)
 
-        # Load configuration
-        config = load_config(args.config)
+        if is_post:
+            # Handle individual post scraping
+            logger.info(f"Detected post input: {post_id}")
 
-        # Update configuration with command line arguments
-        config_updates = {
-            "max_posts": args.num_posts or config.scraping.max_posts,
-            "extract_comments": args.comments,
-            "max_comments_per_post": args.max_comments,
-            "max_replies_per_comment": args.max_replies,
-            "download_images": args.download_images,
-            "cookies_file": args.cookies,
-            "output_dir": args.output,
-            "log_file": args.log_file,
-        }
+            config = load_config(args.config)
 
-        # Update network settings
-        config.scraping.request_timeout = args.timeout
-        config.scraping.max_retries = args.retries
-        config.scraping.retry_delay = args.delay
+            config_updates = {
+                "extract_comments": args.comments,
+                "max_comments_per_post": args.max_comments,
+                "max_replies_per_comment": args.max_replies,
+                "download_images": args.download_images,
+                "cookies_file": args.cookies,
+                "output_dir": args.output,
+                "log_file": args.log_file,
+            }
 
-        # Update output settings
-        config.output.pretty_print = not args.compact
+            config.scraping.request_timeout = args.timeout
+            config.scraping.max_retries = args.retries
+            config.scraping.retry_delay = args.delay
 
-        config = update_config_from_args(config, **config_updates)
+            config.output.pretty_print = not args.compact
 
-        # Save configuration if requested
-        if args.save_config:
-            if save_config_to_file(config, args.save_config):
-                logger.info(f"Configuration saved to: {args.save_config}")
-            else:
-                logger.warning(f"Failed to save configuration to: {args.save_config}")
+            config = update_config_from_args(config, **config_updates)
 
-        # Create scraper and start scraping
-        scraper = CommunityPostScraper(config)
-        logger.info(f"Starting scrape for channel: {channel_id}")
+            if args.save_config:
+                if save_config_to_file(config, args.save_config):
+                    logger.info(f"Configuration saved to: {args.save_config}")
+                else:
+                    logger.warning(
+                        f"Failed to save configuration to: {args.save_config}"
+                    )
 
-        archive_data = scraper.scrape_posts(channel_id)
+            # Create scraper and scrape individual post
+            scraper = CommunityPostScraper(config)
+            logger.info(f"Starting individual post scrape: {args.target}")
+
+            archive_data = scraper.scrape_individual_post(args.target)
+
+        else:
+            # Handle channel scraping (existing logic)
+            # Validate and normalize channel ID
+            channel_id = normalize_channel_id(args.target)
+            if not validate_channel_id(channel_id):
+                raise ValidationError(f"Invalid channel ID format: {args.target}")
+
+            config = load_config(args.config)
+
+            config_updates = {
+                "max_posts": args.num_posts or config.scraping.max_posts,
+                "extract_comments": args.comments,
+                "max_comments_per_post": args.max_comments,
+                "max_replies_per_comment": args.max_replies,
+                "download_images": args.download_images,
+                "cookies_file": args.cookies,
+                "output_dir": args.output,
+                "log_file": args.log_file,
+            }
+
+            config.scraping.request_timeout = args.timeout
+            config.scraping.max_retries = args.retries
+            config.scraping.retry_delay = args.delay
+
+            config.output.pretty_print = not args.compact
+
+            config = update_config_from_args(config, **config_updates)
+
+            if args.save_config:
+                if save_config_to_file(config, args.save_config):
+                    logger.info(f"Configuration saved to: {args.save_config}")
+                else:
+                    logger.warning(
+                        f"Failed to save configuration to: {args.save_config}"
+                    )
+
+            # Create scraper and start scraping
+            scraper = CommunityPostScraper(config)
+            logger.info(f"Starting scrape for channel: {channel_id}")
+
+            archive_data = scraper.scrape_posts(channel_id)
 
         if not archive_data.posts:
-            logger.warning("No posts found for this channel")
-            if not args.quiet:
-                print("No posts found for this channel. This might be because:")
-                print("- The channel has no community posts")
-                print("- The channel's community tab is not accessible")
-                print("- The channel ID is incorrect")
+            if is_post:
+                logger.warning("Post not found or could not be accessed")
+                if not args.quiet:
+                    print(
+                        "Post not found or could not be accessed. This might be because:"
+                    )
+                    print("- The post ID is incorrect")
+                    print("- The post has been deleted")
+                    print("- The post is private or members-only")
+                    print("- Authentication is required (use --cookies)")
+            else:
+                logger.warning("No posts found for this channel")
+                if not args.quiet:
+                    print("No posts found for this channel. This might be because:")
+                    print("- The channel has no community posts")
+                    print("- The channel's community tab is not accessible")
+                    print("- The channel ID is incorrect")
             return 0
 
         # Save results

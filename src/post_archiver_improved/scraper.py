@@ -16,7 +16,11 @@ from .exceptions import APIError, ValidationError
 from .extractors import CommentExtractor, PostExtractor
 from .logging_config import get_logger
 from .models import ArchiveData, ArchiveMetadata, Comment, Post
-from .utils import download_image, validate_channel_id
+from .utils import (
+    download_image,
+    is_post_url_or_id,
+    validate_channel_id,
+)
 
 logger = get_logger(__name__)
 
@@ -444,6 +448,175 @@ class CommunityPostScraper:
         except Exception as e:
             logger.warning(f"Error extracting comments for post {post_id}: {e}")
             return []
+
+    def scrape_individual_post(self, post_input: str) -> ArchiveData:
+        """
+        Scrape a single community post by post ID or URL.
+
+        Args:
+            post_input: Post ID or URL
+
+        Returns:
+            ArchiveData object containing the scraped post and metadata
+
+        Raises:
+            ValidationError: If post_input is invalid
+            APIError: If API requests fail
+            ParseError: If response parsing fails
+        """
+        # Check if input is a valid post URL or ID
+        is_post, post_id = is_post_url_or_id(post_input)
+        if not is_post or not post_id:
+            raise ValidationError(f"Invalid post ID or URL format: {post_input}")
+
+        logger.info(f"Starting to scrape individual post: {post_id}")
+        start_time = time.time()
+
+        # Initialize archive data with placeholder metadata
+        metadata = ArchiveMetadata(
+            channel_id=f"post_{post_id}",  # Use post-specific identifier for filename
+            scrape_date=datetime.now().isoformat(),
+            scrape_timestamp=int(datetime.now().timestamp()),
+            posts_count=0,
+            config_used=self._get_config_summary(),
+        )
+        archive_data = ArchiveData(metadata=metadata)
+
+        try:
+            # Get individual post data
+            logger.info("Fetching individual post data...")
+            response = self.api.get_individual_post_data(post_id)
+
+            # Extract post data from response
+            post = self._extract_individual_post_from_response(response, post_id)
+
+            if not post:
+                logger.warning("No post data found for the given post ID")
+                return archive_data
+
+            # Update metadata with actual channel ID
+            archive_data.metadata.channel_id = post.author.id or "unknown"
+
+            # Download images if configured
+            if (
+                self.config.scraping.download_images
+                and post.images
+                and self.config.output.output_dir
+            ):
+                self._download_post_images(post)
+
+            # Extract comments if configured
+            if self.config.scraping.extract_comments and self.comment_extractor:
+                logger.debug(
+                    f"Attempting to extract comments for individual post: {post.post_id}"
+                )
+                post.comments = self._extract_post_comments(
+                    post.author.id or "unknown", post.post_id
+                )
+                logger.info(
+                    f"Extracted {len(post.comments)} comments for individual post"
+                )
+
+            archive_data.posts.append(post)
+            archive_data.metadata.posts_count = 1
+
+            elapsed_time = time.time() - start_time
+            logger.info(
+                f"Individual post scraping completed: 1 post in {elapsed_time:.1f}s"
+            )
+
+            return archive_data
+
+        except Exception as e:
+            logger.error(f"Error during individual post scraping: {e}")
+            raise
+
+    def _extract_individual_post_from_response(
+        self, response: Dict[str, Any], post_id: str
+    ) -> Optional[Post]:
+        """
+        Extract post data from individual post API response.
+
+        Args:
+            response: API response data
+            post_id: Expected post ID
+
+        Returns:
+            Post object if found, None otherwise
+        """
+        try:
+            # Navigate through the response structure to find post data
+            contents = response.get("contents", {})
+
+            # Try different possible response structures
+            if "twoColumnBrowseResultsRenderer" in contents:
+                tabs = contents["twoColumnBrowseResultsRenderer"].get("tabs", [])
+                for tab in tabs:
+                    if "tabRenderer" in tab:
+                        tab_content = tab["tabRenderer"].get("content", {})
+                        if "sectionListRenderer" in tab_content:
+                            sections = tab_content["sectionListRenderer"].get(
+                                "contents", []
+                            )
+                            for section in sections:
+                                if "itemSectionRenderer" in section:
+                                    items = section["itemSectionRenderer"].get(
+                                        "contents", []
+                                    )
+                                    for item in items:
+                                        if "backstagePostThreadRenderer" in item:
+                                            post_renderer = item[
+                                                "backstagePostThreadRenderer"
+                                            ]["post"]["backstagePostRenderer"]
+                                            post = (
+                                                self.post_extractor.extract_post_data(
+                                                    post_renderer
+                                                )
+                                            )
+                                            if (
+                                                post.post_id == post_id
+                                                or not post.post_id
+                                            ):
+                                                post.post_id = (
+                                                    post_id  # Ensure correct post ID
+                                                )
+                                                return post
+
+            # Alternative structure for direct post responses
+            if "header" in response or "metadata" in response:
+                # Try to find backstagePostRenderer in the response
+                def find_post_renderer(obj: Any) -> Optional[Dict[str, Any]]:
+                    if isinstance(obj, dict):
+                        if "backstagePostRenderer" in obj:
+                            renderer = obj["backstagePostRenderer"]
+                            if isinstance(renderer, dict):
+                                return renderer
+                        for value in obj.values():
+                            result = find_post_renderer(value)
+                            if result:
+                                return result
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            result = find_post_renderer(item)
+                            if result:
+                                return result
+                    return None
+
+                post_renderer = find_post_renderer(response)
+                if post_renderer:
+                    post = self.post_extractor.extract_post_data(post_renderer)
+                    if not post.post_id:
+                        post.post_id = post_id  # Ensure correct post ID
+                    return post
+
+            logger.warning(
+                f"Could not find post data in response for post ID: {post_id}"
+            )
+            return None
+
+        except Exception as e:
+            logger.warning(f"Error extracting individual post from response: {e}")
+            return None
 
     def _get_config_summary(self) -> Dict[str, Any]:
         """

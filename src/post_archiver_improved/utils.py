@@ -10,7 +10,7 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -458,6 +458,81 @@ def validate_channel_id(channel_id: str) -> bool:
         return True
 
     return False
+
+
+def extract_post_id_from_url(url: str) -> Optional[str]:
+    """
+    Extract post ID from YouTube community post URL.
+
+    Args:
+        url: YouTube post URL (e.g., "https://www.youtube.com/post/UgkxMVl0vgxzNvE3I52s0oKlEHO3KyfocebU")
+
+    Returns:
+        Post ID if found, None otherwise
+    """
+    if not url:
+        return None
+
+    # Extract post ID from URL patterns
+    post_id_pattern = r"/post/([a-zA-Z0-9_-]+)"
+    match = re.search(post_id_pattern, url)
+
+    if match:
+        post_id = match.group(1)
+        logger.debug(f"Extracted post ID from URL: {post_id}")
+        return post_id
+
+    return None
+
+
+def validate_post_id(post_id: str) -> bool:
+    """
+    Validate YouTube post ID format.
+
+    Args:
+        post_id: Post ID to validate
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if not post_id:
+        return False
+
+    # YouTube post IDs are typically alphanumeric with underscores and hyphens
+    # They usually start with "Ugk" and are around 35-50 characters long
+    if post_id.startswith("Ugk") and 20 <= len(post_id) <= 60:
+        return all(c.isalnum() or c in "_-" for c in post_id)
+
+    return False
+
+
+def is_post_url_or_id(input_str: str) -> Tuple[bool, Optional[str]]:
+    """
+    Check if input is a post URL or post ID and extract the post ID.
+
+    Args:
+        input_str: Input string to check
+
+    Returns:
+        Tuple of (is_post, post_id)
+        - is_post: True if input is a valid post URL or ID
+        - post_id: Extracted post ID if valid, None otherwise
+    """
+    if not input_str:
+        return False, None
+
+    # First check if it's a direct post ID
+    if validate_post_id(input_str):
+        logger.debug(f"Input is a valid post ID: {input_str}")
+        return True, input_str
+
+    # Check if it's a post URL
+    post_id = extract_post_id_from_url(input_str)
+    if post_id and validate_post_id(post_id):
+        logger.debug(f"Input is a valid post URL with ID: {post_id}")
+        return True, post_id
+
+    return False, None
 
 
 def format_file_size(size_bytes: int) -> str:
