@@ -73,7 +73,7 @@ jobs:
         fi
         
         # Save changelog to file for multi-line output
-        cat > changelog.txt << 'EOF'
+        cat > changelog.txt << EOF
         ## What's Changed
         
         $CHANGELOG
