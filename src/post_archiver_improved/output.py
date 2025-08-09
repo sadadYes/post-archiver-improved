@@ -93,14 +93,20 @@ class OutputManager:
         Generate output filename based on channel ID and timestamp.
 
         Args:
-            channel_id: YouTube channel ID
+            channel_id: YouTube channel ID or "post_<post_id>" for individual posts
 
         Returns:
             Generated file path
         """
         output_dir = self.config.output_dir or Path.cwd()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"posts_{channel_id}_{timestamp}.json"
+
+        # Handle individual post filename differently
+        if channel_id.startswith("post_"):
+            filename = f"{channel_id}_{timestamp}.json"
+        else:
+            filename = f"posts_{channel_id}_{timestamp}.json"
+
         return output_dir / filename
 
     def _save_json_file(self, archive_data: ArchiveData, file_path: Path) -> None:
