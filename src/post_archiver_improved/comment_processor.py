@@ -124,9 +124,7 @@ class CommentProcessor:
             logger.error(f"Error extracting comments for post {post_id}: {e}")
             return []
 
-    def _find_comment_continuation_token(
-        self, response: dict[str, Any]
-    ) -> str | None:
+    def _find_comment_continuation_token(self, response: dict[str, Any]) -> str | None:
         """
         Find the continuation token for loading comments from post detail response.
 
