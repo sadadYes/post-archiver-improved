@@ -20,6 +20,9 @@ from .models import Author, Comment, Image, Link, Post
 
 logger = get_logger(__name__)
 
+# Pre-compiled regex for extracting numeric values from strings
+_RE_EXTRACT_DIGITS = re.compile(r"(\d+)")
+
 
 class PostExtractor:
     """
@@ -370,7 +373,7 @@ class PostExtractor:
             if "simpleText" in button_text:
                 comment_text = button_text["simpleText"]
                 # Extract number from text like "5 Comments"
-                match = re.search(r"(\d+)", comment_text)
+                match = _RE_EXTRACT_DIGITS.search(comment_text)
                 if match:
                     post.comments_count = match.group(1)
                 else:
@@ -378,7 +381,7 @@ class PostExtractor:
             elif "runs" in button_text and button_text["runs"]:
                 comment_text = button_text["runs"][0].get("text", "")
                 # Extract number from text like "5 Comments" or just "15"
-                match = re.search(r"(\d+)", comment_text)
+                match = _RE_EXTRACT_DIGITS.search(comment_text)
                 if match:
                     post.comments_count = match.group(1)
                 else:
@@ -719,7 +722,7 @@ class CommentExtractor:
 
                 reply_count_a11y = toolbar.get("replyCountA11y", "0")
                 if reply_count_a11y:
-                    match = re.search(r"(\d+)", reply_count_a11y)
+                    match = _RE_EXTRACT_DIGITS.search(reply_count_a11y)
                     reply_count = match.group(1) if match else "0"
 
             # Override with toolbar entity data if available
@@ -734,7 +737,7 @@ class CommentExtractor:
 
                 toolbar_reply_count_a11y = toolbar_entity.get("replyCountA11y", "0")
                 if toolbar_reply_count_a11y:
-                    match = re.search(r"(\d+)", toolbar_reply_count_a11y)
+                    match = _RE_EXTRACT_DIGITS.search(toolbar_reply_count_a11y)
                     toolbar_reply_count = match.group(1) if match else "0"
                     if toolbar_reply_count != "0":
                         reply_count = toolbar_reply_count
@@ -874,7 +877,7 @@ class CommentExtractor:
                             button_text = reply_button["buttonRenderer"].get("text", {})
                             if "simpleText" in button_text:
                                 text = button_text["simpleText"]
-                                match = re.search(r"(\d+)", text)
+                                match = _RE_EXTRACT_DIGITS.search(text)
                                 if match:
                                     reply_count = match.group(1)
 

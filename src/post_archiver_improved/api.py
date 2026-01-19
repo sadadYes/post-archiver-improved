@@ -8,6 +8,8 @@ for community posts and comments.
 from __future__ import annotations
 
 import base64
+import gzip
+import re
 from typing import Any
 
 from .constants import (
@@ -23,6 +25,19 @@ from .logging_config import get_logger
 from .utils import make_http_request
 
 logger = get_logger(__name__)
+
+# Pre-compiled regex patterns for extracting channel IDs from HTML responses
+_CHANNEL_ID_PATTERNS = [
+    re.compile(r'"channelId":"(UC[a-zA-Z0-9_-]{22})"'),
+    re.compile(r'"browseId":"(UC[a-zA-Z0-9_-]{22})"'),
+    re.compile(
+        r'<link[^>]*rel="canonical"[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"'
+    ),
+    re.compile(
+        r'<meta[^>]*property="og:url"[^>]*content="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"'
+    ),
+    re.compile(r'"externalId":"(UC[a-zA-Z0-9_-]{22})"'),
+]
 
 
 class YouTubeCommunityAPI:
@@ -170,31 +185,17 @@ class YouTubeCommunityAPI:
                 # Read and decode the response
                 content = response.read()
                 if response.info().get("Content-Encoding") == "gzip":
-                    import gzip
-
                     content = gzip.decompress(content)
 
                 html_content = content.decode("utf-8", errors="ignore")
 
-            # Look for the canonical channel URL which contains the channel ID
-            import re
-
-            patterns = [
-                r'"channelId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'"browseId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'<link[^>]*rel="canonical"[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
-                r'<meta[^>]*property="og:url"[^>]*content="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
-                r'"externalId":"(UC[a-zA-Z0-9_-]{22})"',
-            ]
-
-            for pattern in patterns:
-                matches = re.findall(pattern, html_content)
+            for pattern in _CHANNEL_ID_PATTERNS:
+                matches = pattern.findall(html_content)
                 if matches:
                     channel_id = matches[0]
                     logger.info(f"Resolved handle {handle} to channel ID: {channel_id}")
                     return str(channel_id)
 
-            # If no patterns matched, try a different approach with the API
             logger.warning(
                 f"Could not resolve handle {handle} from HTML, trying alternative method"
             )
@@ -477,25 +478,12 @@ class YouTubeCommunityAPI:
                 # Read and decode the response
                 content = response.read()
                 if response.info().get("Content-Encoding") == "gzip":
-                    import gzip
-
                     content = gzip.decompress(content)
 
                 html_content = content.decode("utf-8", errors="ignore")
 
-            # Look for the channel ID in the HTML
-            import re
-
-            patterns = [
-                r'"channelId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'"browseId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'"externalId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'<link[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
-                r'"webCommandMetadata":{"url":"/channel/(UC[a-zA-Z0-9_-]{22})"',
-            ]
-
-            for pattern in patterns:
-                matches = re.findall(pattern, html_content)
+            for pattern in _CHANNEL_ID_PATTERNS:
+                matches = pattern.findall(html_content)
                 if matches:
                     channel_id = str(matches[0])
                     logger.debug(f"Extracted channel ID from post page: {channel_id}")

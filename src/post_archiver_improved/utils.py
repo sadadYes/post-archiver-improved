@@ -23,6 +23,12 @@ from .logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# Pre-compiled regex patterns for performance
+_RE_EXTENSION_CLEAN = re.compile(r"[^a-zA-Z0-9]")
+_RE_SANITIZE_FILENAME = re.compile(r"[^\w\-_.]")
+_RE_COLLAPSE_UNDERSCORES = re.compile(r"_+")
+_RE_POST_ID = re.compile(r"/post/([a-zA-Z0-9_-]+)")
+
 
 def load_cookies_from_netscape_file(cookies_file: Path) -> dict[str, str] | None:
     """
@@ -295,7 +301,7 @@ def download_image(
 
         if "." in path:
             extension = path.split(".")[-1].lower()
-            extension = re.sub(r"[^a-zA-Z0-9]", "", extension)[:10]
+            extension = _RE_EXTENSION_CLEAN.sub("", extension)[:10]
             if extension not in ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"]:
                 extension = "jpg"
         else:
@@ -408,8 +414,8 @@ def sanitize_filename(filename: str, max_length: int = 200) -> str:
         Sanitized filename
     """
     # Remove or replace invalid characters
-    safe_name = re.sub(r"[^\w\-_.]", "_", filename)
-    safe_name = re.sub(r"_+", "_", safe_name)  # Collapse multiple underscores
+    safe_name = _RE_SANITIZE_FILENAME.sub("_", filename)
+    safe_name = _RE_COLLAPSE_UNDERSCORES.sub("_", safe_name)
     safe_name = safe_name.strip("_.")  # Remove leading/trailing underscores and dots
 
     # Ensure filename is not empty
@@ -476,9 +482,7 @@ def extract_post_id_from_url(url: str) -> str | None:
     if not url:
         return None
 
-    # Extract post ID from URL patterns
-    post_id_pattern = r"/post/([a-zA-Z0-9_-]+)"
-    match = re.search(post_id_pattern, url)
+    match = _RE_POST_ID.search(url)
 
     if match:
         post_id = match.group(1)
