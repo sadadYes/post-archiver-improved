@@ -39,6 +39,9 @@ _CHANNEL_ID_PATTERNS = [
     re.compile(r'"externalId":"(UC[a-zA-Z0-9_-]{22})"'),
 ]
 
+# Module-level cache for resolved channel handles
+_handle_cache: dict[str, str] = {}
+
 
 class YouTubeCommunityAPI:
     """
@@ -141,9 +144,52 @@ class YouTubeCommunityAPI:
             logger.error(f"Unexpected error during API request: {e}")
             raise APIError(f"Unexpected API error: {e}") from e
 
+    def _resolve_channel_handle_impl(self, handle: str) -> str:
+        """Internal implementation of channel handle resolution."""
+        logger.debug(f"Resolving channel handle: {handle}")
+
+        channel_url = f"{YOUTUBE_BASE_URL}/{handle}"
+        logger.debug(f"Requesting channel page: {channel_url}")
+
+        headers = {
+            "User-Agent": DEFAULT_USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+        }
+
+        from urllib.request import Request, urlopen
+
+        request = Request(channel_url, headers=headers)
+
+        with urlopen(request, timeout=self.timeout) as response:  # nosec B310
+            if response.status != 200:
+                raise APIError(f"Channel page returned status {response.status}")
+
+            content = response.read()
+            if response.info().get("Content-Encoding") == "gzip":
+                content = gzip.decompress(content)
+
+            html_content = content.decode("utf-8", errors="ignore")
+
+        for pattern in _CHANNEL_ID_PATTERNS:
+            matches = pattern.findall(html_content)
+            if matches:
+                channel_id = matches[0]
+                logger.info(f"Resolved handle {handle} to channel ID: {channel_id}")
+                return str(channel_id)
+
+        logger.warning(
+            f"Could not resolve handle {handle} from HTML, trying alternative method"
+        )
+        raise APIError(f"Could not resolve channel handle {handle} to channel ID")
+
     def resolve_channel_handle(self, handle: str) -> str:
         """
         Resolve a channel handle (@username) to a channel ID.
+
+        Uses module-level cache to avoid redundant network requests.
 
         Args:
             handle: Channel handle (e.g., '@username')
@@ -158,48 +204,14 @@ class YouTubeCommunityAPI:
         if not handle.startswith("@"):
             raise ValidationError(f"Invalid handle format: {handle}")
 
-        logger.debug(f"Resolving channel handle: {handle}")
+        if handle in _handle_cache:
+            logger.debug(f"Using cached channel ID for {handle}")
+            return _handle_cache[handle]
 
         try:
-            # Construct the channel URL from the handle
-            channel_url = f"{YOUTUBE_BASE_URL}/{handle}"
-            logger.debug(f"Requesting channel page: {channel_url}")
-
-            # Make a request to the channel page
-            headers = {
-                "User-Agent": DEFAULT_USER_AGENT,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-                "Accept-Encoding": "gzip, deflate",
-                "Connection": "keep-alive",
-            }
-
-            from urllib.request import Request, urlopen
-
-            request = Request(channel_url, headers=headers)
-
-            with urlopen(request, timeout=self.timeout) as response:  # nosec B310
-                if response.status != 200:
-                    raise APIError(f"Channel page returned status {response.status}")
-
-                # Read and decode the response
-                content = response.read()
-                if response.info().get("Content-Encoding") == "gzip":
-                    content = gzip.decompress(content)
-
-                html_content = content.decode("utf-8", errors="ignore")
-
-            for pattern in _CHANNEL_ID_PATTERNS:
-                matches = pattern.findall(html_content)
-                if matches:
-                    channel_id = matches[0]
-                    logger.info(f"Resolved handle {handle} to channel ID: {channel_id}")
-                    return str(channel_id)
-
-            logger.warning(
-                f"Could not resolve handle {handle} from HTML, trying alternative method"
-            )
-            raise APIError(f"Could not resolve channel handle {handle} to channel ID")
+            channel_id = self._resolve_channel_handle_impl(handle)
+            _handle_cache[handle] = channel_id
+            return channel_id
 
         except Exception as e:
             if isinstance(e, (APIError, ValidationError)):
