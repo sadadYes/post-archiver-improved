@@ -352,10 +352,16 @@ class YouTubeCommunityAPI:
         logger.debug(f"Fetching post detail data for post: {post_id}")
 
         try:
-            # Encode parameters for post detail endpoint
             channel_bytes = channel_id.encode("utf-8")
             post_bytes = post_id.encode("utf-8")
 
+            # YouTube internal API protobuf-like parameter structure:
+            # \xc2\x03 - Message type identifier for post detail request
+            # Z\x12 - Field delimiter + length prefix marker
+            # <len><channel_bytes> - Channel ID with length prefix
+            # \x1a - Field separator for post ID
+            # <len><post_bytes> - Post ID with length prefix
+            # Z<len><channel_bytes> - Repeated channel ID for context
             params_data = (
                 b"\xc2\x03Z\x12"
                 + bytes([len(channel_bytes)])
@@ -422,12 +428,15 @@ class YouTubeCommunityAPI:
 
                 post_bytes = post_id.encode("utf-8")
 
-                # Try a different parameter structure that works for individual posts
+                # Alternative protobuf structure for individual post access:
+                # \x08\x01 - Request type flag (individual post)
+                # \x12<len><post_bytes> - Post ID with length prefix
+                # \x18\x01 - Additional flags for post access mode
                 params_data = (
                     b"\x08\x01\x12"
                     + bytes([len(post_bytes)])
                     + post_bytes
-                    + b"\x18\x01"  # Additional parameters for individual post access
+                    + b"\x18\x01"
                 )
 
                 params = base64.b64encode(params_data).decode("ascii")
