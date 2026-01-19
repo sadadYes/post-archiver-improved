@@ -7,6 +7,7 @@ This module handles configuration loading, validation, and default values.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -27,7 +28,7 @@ logger = get_logger(__name__)
 class ScrapingConfig:
     """Configuration for scraping operations."""
 
-    max_posts: int | float = float("inf")
+    max_posts: int | float = math.inf
     extract_comments: bool = False
     max_comments_per_post: int = DEFAULT_MAX_COMMENTS
     max_replies_per_comment: int = DEFAULT_MAX_REPLIES
@@ -35,15 +36,15 @@ class ScrapingConfig:
     request_timeout: int = DEFAULT_TIMEOUT
     max_retries: int = DEFAULT_MAX_RETRIES
     retry_delay: float = DEFAULT_RETRY_DELAY
-    cookies_file: Path | None = None
+    cookies_file: Path | str | None = None
 
 
 @dataclass
 class OutputConfig:
     """Configuration for output operations."""
 
-    output_dir: Path | None = None
-    save_format: str = "json"  # Future: support for other formats
+    output_dir: Path | str | None = None
+    save_format: str = "json"
     pretty_print: bool = True
     include_metadata: bool = True
 
@@ -54,23 +55,33 @@ class Config:
 
     scraping: ScrapingConfig
     output: OutputConfig
-    log_file: Path | None = None
+    log_file: Path | str | None = None
 
     def __post_init__(self) -> None:
-        """Post-initialization processing."""
-        # Ensure output_dir is a Path object
-        if self.output.output_dir and not isinstance(self.output.output_dir, Path):
-            self.output.output_dir = Path(self.output.output_dir)  # type: ignore
+        """Post-initialization processing and validation."""
+        if isinstance(self.output.output_dir, str):
+            self.output.output_dir = Path(self.output.output_dir)
 
-        # Ensure log_file is a Path object if specified
-        if self.log_file and not isinstance(self.log_file, Path):
-            self.log_file = Path(self.log_file)  # type: ignore
+        if isinstance(self.log_file, str):
+            self.log_file = Path(self.log_file)
 
-        # Ensure cookies_file is a Path object if specified
-        if self.scraping.cookies_file and not isinstance(
-            self.scraping.cookies_file, Path
-        ):
-            self.scraping.cookies_file = Path(self.scraping.cookies_file)  # type: ignore
+        if isinstance(self.scraping.cookies_file, str):
+            self.scraping.cookies_file = Path(self.scraping.cookies_file)
+
+        self._validate_config()
+
+    def _validate_config(self) -> None:
+        """Validate configuration values."""
+        if self.scraping.request_timeout <= 0:
+            raise ValueError("request_timeout must be positive")
+        if self.scraping.max_retries < 0:
+            raise ValueError("max_retries cannot be negative")
+        if self.scraping.retry_delay < 0:
+            raise ValueError("retry_delay cannot be negative")
+        if self.scraping.max_comments_per_post <= 0:
+            raise ValueError("max_comments_per_post must be positive")
+        if self.scraping.max_replies_per_comment <= 0:
+            raise ValueError("max_replies_per_comment must be positive")
 
 
 def get_default_config() -> Config:
@@ -105,7 +116,7 @@ def load_config_from_file(config_path: Path) -> Config | None:
             scraping_data.get("max_posts") == "infinity"
             or scraping_data.get("max_posts") is None
         ):
-            scraping_data["max_posts"] = float("inf")
+            scraping_data["max_posts"] = math.inf
 
         config = Config(
             scraping=ScrapingConfig(**scraping_data),
@@ -142,7 +153,7 @@ def save_config_to_file(config: Config, config_path: Path) -> bool:
         data = asdict(config)
 
         # Handle special cases
-        if data["scraping"]["max_posts"] == float("inf"):
+        if data["scraping"]["max_posts"] == math.inf:
             data["scraping"]["max_posts"] = "infinity"
 
         # Convert Path objects to strings

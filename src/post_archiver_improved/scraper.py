@@ -7,6 +7,7 @@ including comments and images, with comprehensive error handling and logging.
 
 from __future__ import annotations
 
+import math
 import time
 from datetime import datetime
 from pathlib import Path
@@ -142,7 +143,7 @@ class CommunityPostScraper:
                     continuation_token = self._find_continuation_token(contents)
 
                     remaining_posts = None
-                    if max_posts is not None and max_posts != float("inf"):
+                    if max_posts is not None and max_posts != math.inf:
                         remaining_posts = int(max_posts - len(archive_data.posts))
                     posts = self._process_posts_batch(
                         contents, resolved_channel_id, max_posts=remaining_posts
@@ -630,7 +631,7 @@ class CommunityPostScraper:
         return {
             "max_posts": (
                 self.config.scraping.max_posts
-                if self.config.scraping.max_posts != float("inf")
+                if self.config.scraping.max_posts != math.inf
                 else "unlimited"
             ),
             "extract_comments": self.config.scraping.extract_comments,

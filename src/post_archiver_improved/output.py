@@ -100,7 +100,9 @@ class OutputManager:
         Returns:
             Generated file path
         """
-        output_dir = self.config.output_dir or Path.cwd()
+        output_dir = (
+            Path(self.config.output_dir) if self.config.output_dir else Path.cwd()
+        )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Handle individual post filename differently
@@ -232,7 +234,7 @@ class OutputManager:
             return "Unknown"
 
     def save_summary_report(
-        self, archive_data: ArchiveData, output_dir: Path | None = None
+        self, archive_data: ArchiveData, output_dir: Path | str | None = None
     ) -> Path | None:
         """
         Save summary report to a text file.
@@ -245,14 +247,23 @@ class OutputManager:
             Path to saved report file or None if saving fails
         """
         try:
-            if not output_dir:
-                output_dir = self.config.output_dir or Path.cwd()
+            resolved_dir: Path
+            if output_dir is None:
+                resolved_dir = (
+                    Path(self.config.output_dir)
+                    if self.config.output_dir
+                    else Path.cwd()
+                )
+            elif isinstance(output_dir, str):
+                resolved_dir = Path(output_dir)
+            else:
+                resolved_dir = output_dir
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             report_filename = (
                 f"summary_{archive_data.metadata.channel_id}_{timestamp}.txt"
             )
-            report_path = output_dir / report_filename
+            report_path = resolved_dir / report_filename
 
             report_content = self.create_summary_report(archive_data)
 

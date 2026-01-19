@@ -2,7 +2,7 @@
 Data models for YouTube community posts and comments.
 
 This module defines the data structures used to represent posts, comments,
-and related metadata.
+and related metadata. Uses slots=True on Python 3.10+ for memory efficiency.
 """
 
 from __future__ import annotations
@@ -236,30 +236,28 @@ class ArchiveData:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert archive data to dictionary format for JSON serialization."""
+        total_comments = 0
+        total_images = 0
+        images_downloaded = 0
 
-        # Calculate statistics
-        def count_comments_recursive(comments: list[Comment]) -> int:
-            """Recursively count comments including all nested replies."""
-            total = len(comments)
-            for comment in comments:
-                total += count_comments_recursive(comment.replies)
-            return total
+        stack: list[Comment] = []
+        for post in self.posts:
+            total_images += len(post.images)
+            images_downloaded += sum(1 for img in post.images if img.local_path)
+            stack.extend(post.comments)
 
-        total_comments = sum(
-            count_comments_recursive(post.comments) for post in self.posts
-        )
-        total_images = sum(len(post.images) for post in self.posts)
-        images_downloaded = sum(
-            1 for post in self.posts for image in post.images if image.local_path
-        )
+        while stack:
+            comment = stack.pop()
+            total_comments += 1
+            stack.extend(comment.replies)
 
-        # Update metadata
-        self.metadata.total_comments = total_comments
-        self.metadata.total_images = total_images
-        self.metadata.images_downloaded = images_downloaded
+        metadata_dict = self.metadata.to_dict()
+        metadata_dict["total_comments"] = total_comments
+        metadata_dict["total_images"] = total_images
+        metadata_dict["images_downloaded"] = images_downloaded
 
         return {
-            **self.metadata.to_dict(),
+            **metadata_dict,
             "posts": [post.to_dict() for post in self.posts],
         }
 

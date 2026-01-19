@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -268,7 +269,7 @@ def make_http_request(
 def download_image(
     image_url: str,
     filename: str,
-    output_dir: Path,
+    output_dir: Path | str | None,
     timeout: int = 30,
     max_retries: int = 3,
 ) -> str | None:
@@ -289,6 +290,10 @@ def download_image(
         FileOperationError: If file operations fail
     """
     try:
+        if output_dir is None:
+            output_dir = Path.cwd()
+        elif isinstance(output_dir, str):
+            output_dir = Path(output_dir)
         images_dir = output_dir / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
@@ -363,9 +368,8 @@ def download_image(
                             f"Unexpected content type '{content_type}' for image URL"
                         )
 
-                    # Download the image
                     with open(file_path, "wb") as f:
-                        f.write(response.read())
+                        shutil.copyfileobj(response, f, length=65536)
 
                     # Verify the file was created and has content
                     if file_path.exists() and file_path.stat().st_size > 0:
