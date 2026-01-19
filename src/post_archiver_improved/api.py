@@ -5,8 +5,10 @@ This module handles all interactions with YouTube's internal API endpoints
 for community posts and comments.
 """
 
+from __future__ import annotations
+
 import base64
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .constants import (
     COMMUNITY_TAB_PARAMS,
@@ -36,7 +38,7 @@ class YouTubeCommunityAPI:
         timeout: int = 30,
         max_retries: int = 3,
         retry_delay: float = 1.0,
-        cookies_file: Optional[str] = None,
+        cookies_file: str | None = None,
     ):
         """
         Initialize the YouTube API client.
@@ -82,7 +84,7 @@ class YouTubeCommunityAPI:
 
         logger.debug("YouTube API client initialized")
 
-    def _make_request(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _make_request(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
         """
         Make a POST request to YouTube API with error handling.
 
@@ -204,7 +206,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Error resolving channel handle {handle}: {e}")
             raise APIError(f"Failed to resolve channel handle {handle}: {e}") from e
 
-    def get_initial_data(self, channel_id: str) -> Dict[str, Any]:
+    def get_initial_data(self, channel_id: str) -> dict[str, Any]:
         """
         Get initial community tab data for a channel.
 
@@ -246,7 +248,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get initial data: {e}")
             raise APIError(f"Failed to get initial data: {e}") from e
 
-    def get_continuation_data(self, continuation_token: str) -> Dict[str, Any]:
+    def get_continuation_data(self, continuation_token: str) -> dict[str, Any]:
         """
         Get next batch of posts using continuation token.
 
@@ -279,7 +281,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get continuation data: {e}")
             raise APIError(f"Failed to get continuation data: {e}") from e
 
-    def get_reply_continuation_data(self, continuation_token: str) -> Dict[str, Any]:
+    def get_reply_continuation_data(self, continuation_token: str) -> dict[str, Any]:
         """
         Get next batch of replies using continuation token.
 
@@ -314,7 +316,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get reply continuation data: {e}")
             raise APIError(f"Failed to get reply continuation data: {e}") from e
 
-    def get_post_detail_data(self, channel_id: str, post_id: str) -> Dict[str, Any]:
+    def get_post_detail_data(self, channel_id: str, post_id: str) -> dict[str, Any]:
         """
         Get detailed post data including comments.
 
@@ -371,7 +373,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get post detail data: {e}")
             raise APIError(f"Failed to get post detail data: {e}") from e
 
-    def get_individual_post_data(self, post_id: str) -> Dict[str, Any]:
+    def get_individual_post_data(self, post_id: str) -> dict[str, Any]:
         """
         Get data for an individual post by post ID.
 
@@ -433,7 +435,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get individual post data: {e}")
             raise APIError(f"Failed to get individual post data: {e}") from e
 
-    def _extract_channel_id_from_post(self, post_id: str) -> Optional[str]:
+    def _extract_channel_id_from_post(self, post_id: str) -> str | None:
         """
         Extract channel ID from a post by visiting the post URL.
 
@@ -509,7 +511,7 @@ class YouTubeCommunityAPI:
             return None
 
     def validate_response(
-        self, response: Any, expected_keys: Optional[list[str]] = None
+        self, response: Any, expected_keys: list[str] | None = None
     ) -> bool:
         """
         Validate API response structure.

@@ -5,8 +5,10 @@ This module defines the data structures used to represent posts, comments,
 and related metadata.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -34,10 +36,10 @@ class Image:
     """Represents an image attachment."""
 
     src: str = ""
-    local_path: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    file_size: Optional[int] = None
+    local_path: str | None = None
+    width: int | None = None
+    height: int | None = None
+    file_size: int | None = None
 
 
 @dataclass
@@ -53,9 +55,9 @@ class Comment:
     is_favorited: bool = False
     is_pinned: bool = False
     reply_count: str = "0"
-    replies: List["Comment"] = field(default_factory=list)
+    replies: list[Comment] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert comment to dictionary format for JSON serialization."""
         return {
             "id": self.id,
@@ -76,7 +78,7 @@ class Comment:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Comment":
+    def from_dict(cls, data: dict[str, Any]) -> Comment:
         """Create Comment instance from dictionary."""
         author = Author(
             id=data.get("author_id", ""),
@@ -115,11 +117,11 @@ class Post:
     comments_count: str = "0"
     members_only: bool = False
     author: Author = field(default_factory=Author)
-    images: List[Image] = field(default_factory=list)
-    links: List[Link] = field(default_factory=list)
-    comments: List[Comment] = field(default_factory=list)
+    images: list[Image] = field(default_factory=list)
+    links: list[Link] = field(default_factory=list)
+    comments: list[Comment] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert post to dictionary format for JSON serialization."""
         return {
             "post_id": self.post_id,
@@ -150,7 +152,7 @@ class Post:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Post":
+    def from_dict(cls, data: dict[str, Any]) -> Post:
         """Create Post instance from dictionary."""
         author = Author(
             id=data.get("author_id", ""),
@@ -209,9 +211,9 @@ class ArchiveMetadata:
     total_comments: int = 0
     total_images: int = 0
     images_downloaded: int = 0
-    config_used: Dict[str, Any] = field(default_factory=dict)
+    config_used: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metadata to dictionary format."""
         return {
             "channel_id": self.channel_id,
@@ -230,13 +232,13 @@ class ArchiveData:
     """Complete archive data including metadata and posts."""
 
     metadata: ArchiveMetadata
-    posts: List[Post] = field(default_factory=list)
+    posts: list[Post] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert archive data to dictionary format for JSON serialization."""
 
         # Calculate statistics
-        def count_comments_recursive(comments: List[Comment]) -> int:
+        def count_comments_recursive(comments: list[Comment]) -> int:
             """Recursively count comments including all nested replies."""
             total = len(comments)
             for comment in comments:
@@ -262,7 +264,7 @@ class ArchiveData:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ArchiveData":
+    def from_dict(cls, data: dict[str, Any]) -> ArchiveData:
         """Create ArchiveData instance from dictionary."""
         metadata = ArchiveMetadata(
             channel_id=data.get("channel_id", ""),

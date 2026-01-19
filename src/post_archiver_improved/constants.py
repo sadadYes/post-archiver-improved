@@ -2,6 +2,8 @@
 Constants used throughout the post archiver application.
 """
 
+from __future__ import annotations
+
 # YouTube API constants
 YOUTUBE_BASE_URL = "https://www.youtube.com"
 YOUTUBE_API_BASE_URL = "https://www.youtube.com/youtubei/v1"

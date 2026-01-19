@@ -5,6 +5,8 @@ This module provides a comprehensive CLI with proper argument parsing,
 configuration management, and user-friendly output.
 """
 
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path

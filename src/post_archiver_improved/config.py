@@ -4,10 +4,12 @@ Configuration management for the post archiver.
 This module handles configuration loading, validation, and default values.
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from .constants import (
     DEFAULT_MAX_COMMENTS,
@@ -25,7 +27,7 @@ logger = get_logger(__name__)
 class ScrapingConfig:
     """Configuration for scraping operations."""
 
-    max_posts: Optional[Union[int, float]] = float("inf")
+    max_posts: int | float = float("inf")
     extract_comments: bool = False
     max_comments_per_post: int = DEFAULT_MAX_COMMENTS
     max_replies_per_comment: int = DEFAULT_MAX_REPLIES
@@ -33,14 +35,14 @@ class ScrapingConfig:
     request_timeout: int = DEFAULT_TIMEOUT
     max_retries: int = DEFAULT_MAX_RETRIES
     retry_delay: float = DEFAULT_RETRY_DELAY
-    cookies_file: Optional[Path] = None
+    cookies_file: Path | None = None
 
 
 @dataclass
 class OutputConfig:
     """Configuration for output operations."""
 
-    output_dir: Optional[Path] = None
+    output_dir: Path | None = None
     save_format: str = "json"  # Future: support for other formats
     pretty_print: bool = True
     include_metadata: bool = True
@@ -52,7 +54,7 @@ class Config:
 
     scraping: ScrapingConfig
     output: OutputConfig
-    log_file: Optional[Path] = None
+    log_file: Path | None = None
 
     def __post_init__(self) -> None:
         """Post-initialization processing."""
@@ -76,7 +78,7 @@ def get_default_config() -> Config:
     return Config(scraping=ScrapingConfig(), output=OutputConfig())
 
 
-def load_config_from_file(config_path: Path) -> Optional[Config]:
+def load_config_from_file(config_path: Path) -> Config | None:
     """
     Load configuration from a JSON file.
 
@@ -186,7 +188,7 @@ def get_config_search_paths() -> list[Path]:
     return paths
 
 
-def load_config(config_path: Optional[Path] = None) -> Config:
+def load_config(config_path: Path | None = None) -> Config:
     """
     Load configuration from file or use defaults.
 

@@ -5,10 +5,12 @@ This module provides functions for saving archive data in various formats
 with proper error handling and backup creation.
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .config import OutputConfig
 from .exceptions import FileOperationError
@@ -38,7 +40,7 @@ class OutputManager:
         logger.debug("Output manager initialized")
 
     def save_archive_data(
-        self, archive_data: ArchiveData, output_path: Optional[Path] = None
+        self, archive_data: ArchiveData, output_path: Path | None = None
     ) -> Path:
         """
         Save archive data to a file.
@@ -230,8 +232,8 @@ class OutputManager:
             return "Unknown"
 
     def save_summary_report(
-        self, archive_data: ArchiveData, output_dir: Optional[Path] = None
-    ) -> Optional[Path]:
+        self, archive_data: ArchiveData, output_dir: Path | None = None
+    ) -> Path | None:
         """
         Save summary report to a text file.
 
@@ -267,7 +269,7 @@ class OutputManager:
 
 def save_posts(
     archive_data: ArchiveData,
-    output_dir: Optional[Path] = None,
+    output_dir: Path | None = None,
     create_summary: bool = True,
 ) -> Path:
     """

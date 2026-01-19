@@ -5,12 +5,15 @@ This module contains helper functions for HTTP requests, file operations,
 and other common tasks.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import re
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -21,7 +24,7 @@ from .logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def load_cookies_from_netscape_file(cookies_file: Path) -> Optional[Dict[str, str]]:
+def load_cookies_from_netscape_file(cookies_file: Path) -> dict[str, str] | None:
     """
     Load cookies from a Netscape format cookie file.
 
@@ -73,7 +76,7 @@ def load_cookies_from_netscape_file(cookies_file: Path) -> Optional[Dict[str, st
         return None
 
 
-def _format_cookie_header(cookies: Dict[str, str]) -> str:
+def _format_cookie_header(cookies: dict[str, str]) -> str:
     """
     Format cookies dictionary into a Cookie header string.
 
@@ -127,14 +130,14 @@ def _validate_url_scheme(url: str) -> None:
 
 def make_http_request(
     url: str,
-    data: Optional[Dict[str, Any]] = None,
-    headers: Optional[Dict[str, str]] = None,
+    data: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
     method: str = "GET",
     timeout: int = 30,
     max_retries: int = 3,
     retry_delay: float = 1.0,
-    cookies: Optional[Dict[str, str]] = None,
-) -> Dict[str, Any]:
+    cookies: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """
     Make HTTP requests with retry logic and proper error handling.
 
@@ -178,7 +181,7 @@ def make_http_request(
                 logger.warning(f"Failed to generate SAPISID authorization: {e}")
 
     attempt = 0
-    last_exception: Optional[Exception] = None
+    last_exception: Exception | None = None
 
     while attempt <= max_retries:
         try:
@@ -210,7 +213,7 @@ def make_http_request(
                     )
 
                 response_data = response.read().decode("utf-8")
-                result: Dict[str, Any] = json.loads(response_data)
+                result: dict[str, Any] = json.loads(response_data)
 
                 logger.debug(f"Request successful: {response.status}")
                 return result
@@ -262,7 +265,7 @@ def download_image(
     output_dir: Path,
     timeout: int = 30,
     max_retries: int = 3,
-) -> Optional[str]:
+) -> str | None:
     """
     Download an image from a URL with proper error handling.
 
@@ -460,7 +463,7 @@ def validate_channel_id(channel_id: str) -> bool:
     return False
 
 
-def extract_post_id_from_url(url: str) -> Optional[str]:
+def extract_post_id_from_url(url: str) -> str | None:
     """
     Extract post ID from YouTube community post URL.
 
@@ -506,7 +509,7 @@ def validate_post_id(post_id: str) -> bool:
     return False
 
 
-def is_post_url_or_id(input_str: str) -> Tuple[bool, Optional[str]]:
+def is_post_url_or_id(input_str: str) -> tuple[bool, str | None]:
     """
     Check if input is a post URL or post ID and extract the post ID.
 
@@ -569,7 +572,6 @@ def create_backup_filename(original_path: Path) -> Path:
     Returns:
         Backup file path
     """
-    from datetime import datetime
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     stem = original_path.stem
