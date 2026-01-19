@@ -150,6 +150,11 @@ class CommunityPostScraper:
                     )
 
                     if not posts:
+                        if continuation_token:
+                            logger.debug(
+                                "No posts in this batch, following continuation token..."
+                            )
+                            continue
                         logger.info("No more posts found, stopping...")
                         break
 
