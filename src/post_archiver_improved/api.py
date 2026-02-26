@@ -5,12 +5,16 @@ This module handles all interactions with YouTube's internal API endpoints
 for community posts and comments.
 """
 
+from __future__ import annotations
+
 import base64
-from typing import Any, Dict, Optional
+import gzip
+import re
+from typing import Any
 
 from .constants import (
-    COMMUNITY_TAB_PARAMS,
     DEFAULT_USER_AGENT,
+    POSTS_TAB_PARAMS,
     YOUTUBE_BASE_URL,
     YOUTUBE_BROWSE_ENDPOINT,
     YOUTUBE_CLIENT_VERSION,
@@ -21,6 +25,26 @@ from .logging_config import get_logger
 from .utils import make_http_request
 
 logger = get_logger(__name__)
+
+# Pre-compiled regex patterns for extracting channel IDs from HTML responses.
+# Order matters: canonical/authoritative sources first, then fallback patterns.
+# YouTube pages for Official Artist Channels (OAC) may contain multiple channel IDs
+# (sub-channels, topic channels, etc.). The canonical URL and externalId always
+# point to the primary channel, so they must be checked before generic patterns.
+_CHANNEL_ID_PATTERNS = [
+    re.compile(
+        r'<link[^>]*rel="canonical"[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"'
+    ),
+    re.compile(
+        r'<meta[^>]*property="og:url"[^>]*content="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"'
+    ),
+    re.compile(r'"externalId":"(UC[a-zA-Z0-9_-]{22})"'),
+    re.compile(r'"browseId":"(UC[a-zA-Z0-9_-]{22})"'),
+    re.compile(r'"channelId":"(UC[a-zA-Z0-9_-]{22})"'),
+]
+
+# Module-level cache for resolved channel handles
+_handle_cache: dict[str, str] = {}
 
 
 class YouTubeCommunityAPI:
@@ -36,7 +60,7 @@ class YouTubeCommunityAPI:
         timeout: int = 30,
         max_retries: int = 3,
         retry_delay: float = 1.0,
-        cookies_file: Optional[str] = None,
+        cookies_file: str | None = None,
     ):
         """
         Initialize the YouTube API client.
@@ -82,7 +106,7 @@ class YouTubeCommunityAPI:
 
         logger.debug("YouTube API client initialized")
 
-    def _make_request(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _make_request(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
         """
         Make a POST request to YouTube API with error handling.
 
@@ -124,9 +148,52 @@ class YouTubeCommunityAPI:
             logger.error(f"Unexpected error during API request: {e}")
             raise APIError(f"Unexpected API error: {e}") from e
 
+    def _resolve_channel_handle_impl(self, handle: str) -> str:
+        """Internal implementation of channel handle resolution."""
+        logger.debug(f"Resolving channel handle: {handle}")
+
+        channel_url = f"{YOUTUBE_BASE_URL}/{handle}"
+        logger.debug(f"Requesting channel page: {channel_url}")
+
+        headers = {
+            "User-Agent": DEFAULT_USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+        }
+
+        from urllib.request import Request, urlopen
+
+        request = Request(channel_url, headers=headers)
+
+        with urlopen(request, timeout=self.timeout) as response:  # nosec B310
+            if response.status != 200:
+                raise APIError(f"Channel page returned status {response.status}")
+
+            content = response.read()
+            if response.info().get("Content-Encoding") == "gzip":
+                content = gzip.decompress(content)
+
+            html_content = content.decode("utf-8", errors="ignore")
+
+        for pattern in _CHANNEL_ID_PATTERNS:
+            matches = pattern.findall(html_content)
+            if matches:
+                channel_id = matches[0]
+                logger.info(f"Resolved handle {handle} to channel ID: {channel_id}")
+                return str(channel_id)
+
+        logger.warning(
+            f"Could not resolve handle {handle} from HTML, trying alternative method"
+        )
+        raise APIError(f"Could not resolve channel handle {handle} to channel ID")
+
     def resolve_channel_handle(self, handle: str) -> str:
         """
         Resolve a channel handle (@username) to a channel ID.
+
+        Uses module-level cache to avoid redundant network requests.
 
         Args:
             handle: Channel handle (e.g., '@username')
@@ -141,62 +208,14 @@ class YouTubeCommunityAPI:
         if not handle.startswith("@"):
             raise ValidationError(f"Invalid handle format: {handle}")
 
-        logger.debug(f"Resolving channel handle: {handle}")
+        if handle in _handle_cache:
+            logger.debug(f"Using cached channel ID for {handle}")
+            return _handle_cache[handle]
 
         try:
-            # Construct the channel URL from the handle
-            channel_url = f"{YOUTUBE_BASE_URL}/{handle}"
-            logger.debug(f"Requesting channel page: {channel_url}")
-
-            # Make a request to the channel page
-            headers = {
-                "User-Agent": DEFAULT_USER_AGENT,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-                "Accept-Encoding": "gzip, deflate",
-                "Connection": "keep-alive",
-            }
-
-            from urllib.request import Request, urlopen
-
-            request = Request(channel_url, headers=headers)
-
-            with urlopen(request, timeout=self.timeout) as response:  # nosec B310
-                if response.status != 200:
-                    raise APIError(f"Channel page returned status {response.status}")
-
-                # Read and decode the response
-                content = response.read()
-                if response.info().get("Content-Encoding") == "gzip":
-                    import gzip
-
-                    content = gzip.decompress(content)
-
-                html_content = content.decode("utf-8", errors="ignore")
-
-            # Look for the canonical channel URL which contains the channel ID
-            import re
-
-            patterns = [
-                r'"channelId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'"browseId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'<link[^>]*rel="canonical"[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
-                r'<meta[^>]*property="og:url"[^>]*content="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
-                r'"externalId":"(UC[a-zA-Z0-9_-]{22})"',
-            ]
-
-            for pattern in patterns:
-                matches = re.findall(pattern, html_content)
-                if matches:
-                    channel_id = matches[0]
-                    logger.info(f"Resolved handle {handle} to channel ID: {channel_id}")
-                    return str(channel_id)
-
-            # If no patterns matched, try a different approach with the API
-            logger.warning(
-                f"Could not resolve handle {handle} from HTML, trying alternative method"
-            )
-            raise APIError(f"Could not resolve channel handle {handle} to channel ID")
+            channel_id = self._resolve_channel_handle_impl(handle)
+            _handle_cache[handle] = channel_id
+            return channel_id
 
         except Exception as e:
             if isinstance(e, (APIError, ValidationError)):
@@ -204,7 +223,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Error resolving channel handle {handle}: {e}")
             raise APIError(f"Failed to resolve channel handle {handle}: {e}") from e
 
-    def get_initial_data(self, channel_id: str) -> Dict[str, Any]:
+    def get_initial_data(self, channel_id: str) -> dict[str, Any]:
         """
         Get initial community tab data for a channel.
 
@@ -233,7 +252,7 @@ class YouTubeCommunityAPI:
         payload = {
             "context": self.client_context,
             "browseId": browse_id,
-            "params": COMMUNITY_TAB_PARAMS,  # Base64 encoded parameters for community tab
+            "params": POSTS_TAB_PARAMS,
         }
 
         try:
@@ -246,7 +265,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get initial data: {e}")
             raise APIError(f"Failed to get initial data: {e}") from e
 
-    def get_continuation_data(self, continuation_token: str) -> Dict[str, Any]:
+    def get_continuation_data(self, continuation_token: str) -> dict[str, Any]:
         """
         Get next batch of posts using continuation token.
 
@@ -279,7 +298,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get continuation data: {e}")
             raise APIError(f"Failed to get continuation data: {e}") from e
 
-    def get_reply_continuation_data(self, continuation_token: str) -> Dict[str, Any]:
+    def get_reply_continuation_data(self, continuation_token: str) -> dict[str, Any]:
         """
         Get next batch of replies using continuation token.
 
@@ -314,7 +333,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get reply continuation data: {e}")
             raise APIError(f"Failed to get reply continuation data: {e}") from e
 
-    def get_post_detail_data(self, channel_id: str, post_id: str) -> Dict[str, Any]:
+    def get_post_detail_data(self, channel_id: str, post_id: str) -> dict[str, Any]:
         """
         Get detailed post data including comments.
 
@@ -337,20 +356,44 @@ class YouTubeCommunityAPI:
         logger.debug(f"Fetching post detail data for post: {post_id}")
 
         try:
-            # Encode parameters for post detail endpoint
             channel_bytes = channel_id.encode("utf-8")
             post_bytes = post_id.encode("utf-8")
 
-            params_data = (
-                b"\xc2\x03Z\x12"
+            # Protobuf structure (from YouTube.js CommunityPostParams):
+            # message CommunityPostParams {
+            #   message Field1 {
+            #     string ucid1 = 2;    // channel_id
+            #     string post_id = 3;  // post_id
+            #     string ucid2 = 11;   // channel_id (repeated)
+            #   }
+            #   Field1 f1 = 56;
+            # }
+            #
+            # Wire format:
+            #   \xc2\x03 = field 56, wire type 2 (length-delimited)
+            #   <varint>  = length of inner message
+            #   \x12      = field 2, wire type 2 (ucid1)
+            #   \x1a      = field 3, wire type 2 (post_id)
+            #   \x5a      = field 11, wire type 2 (ucid2)
+
+            # Build inner message (Field1)
+            inner_message = (
+                b"\x12"  # field 2 tag (ucid1)
                 + bytes([len(channel_bytes)])
                 + channel_bytes
-                + b"\x1a"
+                + b"\x1a"  # field 3 tag (post_id)
                 + bytes([len(post_bytes)])
                 + post_bytes
-                + b"Z"
+                + b"\x5a"  # field 11 tag (ucid2)
                 + bytes([len(channel_bytes)])
                 + channel_bytes
+            )
+
+            # Build outer message with correct length
+            params_data = (
+                b"\xc2\x03"  # field 56 tag
+                + bytes([len(inner_message)])  # varint length of inner msg
+                + inner_message
             )
 
             params = base64.b64encode(params_data).decode("ascii")
@@ -371,7 +414,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get post detail data: {e}")
             raise APIError(f"Failed to get post detail data: {e}") from e
 
-    def get_individual_post_data(self, post_id: str) -> Dict[str, Any]:
+    def get_individual_post_data(self, post_id: str) -> dict[str, Any]:
         """
         Get data for an individual post by post ID.
 
@@ -407,12 +450,15 @@ class YouTubeCommunityAPI:
 
                 post_bytes = post_id.encode("utf-8")
 
-                # Try a different parameter structure that works for individual posts
+                # Alternative protobuf structure for individual post access:
+                # \x08\x01 - Request type flag (individual post)
+                # \x12<len><post_bytes> - Post ID with length prefix
+                # \x18\x01 - Additional flags for post access mode
                 params_data = (
                     b"\x08\x01\x12"
                     + bytes([len(post_bytes)])
                     + post_bytes
-                    + b"\x18\x01"  # Additional parameters for individual post access
+                    + b"\x18\x01"
                 )
 
                 params = base64.b64encode(params_data).decode("ascii")
@@ -433,7 +479,7 @@ class YouTubeCommunityAPI:
             logger.error(f"Failed to get individual post data: {e}")
             raise APIError(f"Failed to get individual post data: {e}") from e
 
-    def _extract_channel_id_from_post(self, post_id: str) -> Optional[str]:
+    def _extract_channel_id_from_post(self, post_id: str) -> str | None:
         """
         Extract channel ID from a post by visiting the post URL.
 
@@ -475,25 +521,12 @@ class YouTubeCommunityAPI:
                 # Read and decode the response
                 content = response.read()
                 if response.info().get("Content-Encoding") == "gzip":
-                    import gzip
-
                     content = gzip.decompress(content)
 
                 html_content = content.decode("utf-8", errors="ignore")
 
-            # Look for the channel ID in the HTML
-            import re
-
-            patterns = [
-                r'"channelId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'"browseId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'"externalId":"(UC[a-zA-Z0-9_-]{22})"',
-                r'<link[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"',
-                r'"webCommandMetadata":{"url":"/channel/(UC[a-zA-Z0-9_-]{22})"',
-            ]
-
-            for pattern in patterns:
-                matches = re.findall(pattern, html_content)
+            for pattern in _CHANNEL_ID_PATTERNS:
+                matches = pattern.findall(html_content)
                 if matches:
                     channel_id = str(matches[0])
                     logger.debug(f"Extracted channel ID from post page: {channel_id}")
@@ -509,7 +542,7 @@ class YouTubeCommunityAPI:
             return None
 
     def validate_response(
-        self, response: Any, expected_keys: Optional[list[str]] = None
+        self, response: Any, expected_keys: list[str] | None = None
     ) -> bool:
         """
         Validate API response structure.

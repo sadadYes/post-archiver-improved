@@ -5,12 +5,16 @@ This module contains helper functions for HTTP requests, file operations,
 and other common tasks.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import re
+import shutil
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -20,8 +24,14 @@ from .logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# Pre-compiled regex patterns for performance
+_RE_EXTENSION_CLEAN = re.compile(r"[^a-zA-Z0-9]")
+_RE_SANITIZE_FILENAME = re.compile(r"[^\w\-_.]")
+_RE_COLLAPSE_UNDERSCORES = re.compile(r"_+")
+_RE_POST_ID = re.compile(r"/post/([a-zA-Z0-9_-]+)")
 
-def load_cookies_from_netscape_file(cookies_file: Path) -> Optional[Dict[str, str]]:
+
+def load_cookies_from_netscape_file(cookies_file: Path) -> dict[str, str] | None:
     """
     Load cookies from a Netscape format cookie file.
 
@@ -73,7 +83,7 @@ def load_cookies_from_netscape_file(cookies_file: Path) -> Optional[Dict[str, st
         return None
 
 
-def _format_cookie_header(cookies: Dict[str, str]) -> str:
+def _format_cookie_header(cookies: dict[str, str]) -> str:
     """
     Format cookies dictionary into a Cookie header string.
 
@@ -127,14 +137,14 @@ def _validate_url_scheme(url: str) -> None:
 
 def make_http_request(
     url: str,
-    data: Optional[Dict[str, Any]] = None,
-    headers: Optional[Dict[str, str]] = None,
+    data: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
     method: str = "GET",
     timeout: int = 30,
     max_retries: int = 3,
     retry_delay: float = 1.0,
-    cookies: Optional[Dict[str, str]] = None,
-) -> Dict[str, Any]:
+    cookies: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """
     Make HTTP requests with retry logic and proper error handling.
 
@@ -178,7 +188,7 @@ def make_http_request(
                 logger.warning(f"Failed to generate SAPISID authorization: {e}")
 
     attempt = 0
-    last_exception: Optional[Exception] = None
+    last_exception: Exception | None = None
 
     while attempt <= max_retries:
         try:
@@ -210,7 +220,7 @@ def make_http_request(
                     )
 
                 response_data = response.read().decode("utf-8")
-                result: Dict[str, Any] = json.loads(response_data)
+                result: dict[str, Any] = json.loads(response_data)
 
                 logger.debug(f"Request successful: {response.status}")
                 return result
@@ -259,10 +269,10 @@ def make_http_request(
 def download_image(
     image_url: str,
     filename: str,
-    output_dir: Path,
+    output_dir: Path | str | None,
     timeout: int = 30,
     max_retries: int = 3,
-) -> Optional[str]:
+) -> str | None:
     """
     Download an image from a URL with proper error handling.
 
@@ -280,6 +290,10 @@ def download_image(
         FileOperationError: If file operations fail
     """
     try:
+        if output_dir is None:
+            output_dir = Path.cwd()
+        elif isinstance(output_dir, str):
+            output_dir = Path(output_dir)
         images_dir = output_dir / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
 
@@ -292,7 +306,7 @@ def download_image(
 
         if "." in path:
             extension = path.split(".")[-1].lower()
-            extension = re.sub(r"[^a-zA-Z0-9]", "", extension)[:10]
+            extension = _RE_EXTENSION_CLEAN.sub("", extension)[:10]
             if extension not in ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"]:
                 extension = "jpg"
         else:
@@ -354,9 +368,8 @@ def download_image(
                             f"Unexpected content type '{content_type}' for image URL"
                         )
 
-                    # Download the image
                     with open(file_path, "wb") as f:
-                        f.write(response.read())
+                        shutil.copyfileobj(response, f, length=65536)
 
                     # Verify the file was created and has content
                     if file_path.exists() and file_path.stat().st_size > 0:
@@ -405,8 +418,8 @@ def sanitize_filename(filename: str, max_length: int = 200) -> str:
         Sanitized filename
     """
     # Remove or replace invalid characters
-    safe_name = re.sub(r"[^\w\-_.]", "_", filename)
-    safe_name = re.sub(r"_+", "_", safe_name)  # Collapse multiple underscores
+    safe_name = _RE_SANITIZE_FILENAME.sub("_", filename)
+    safe_name = _RE_COLLAPSE_UNDERSCORES.sub("_", safe_name)
     safe_name = safe_name.strip("_.")  # Remove leading/trailing underscores and dots
 
     # Ensure filename is not empty
@@ -460,7 +473,7 @@ def validate_channel_id(channel_id: str) -> bool:
     return False
 
 
-def extract_post_id_from_url(url: str) -> Optional[str]:
+def extract_post_id_from_url(url: str) -> str | None:
     """
     Extract post ID from YouTube community post URL.
 
@@ -473,9 +486,7 @@ def extract_post_id_from_url(url: str) -> Optional[str]:
     if not url:
         return None
 
-    # Extract post ID from URL patterns
-    post_id_pattern = r"/post/([a-zA-Z0-9_-]+)"
-    match = re.search(post_id_pattern, url)
+    match = _RE_POST_ID.search(url)
 
     if match:
         post_id = match.group(1)
@@ -506,7 +517,7 @@ def validate_post_id(post_id: str) -> bool:
     return False
 
 
-def is_post_url_or_id(input_str: str) -> Tuple[bool, Optional[str]]:
+def is_post_url_or_id(input_str: str) -> tuple[bool, str | None]:
     """
     Check if input is a post URL or post ID and extract the post ID.
 
@@ -569,7 +580,6 @@ def create_backup_filename(original_path: Path) -> Path:
     Returns:
         Backup file path
     """
-    from datetime import datetime
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     stem = original_path.stem

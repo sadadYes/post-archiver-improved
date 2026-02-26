@@ -5,8 +5,13 @@ This module handles the complex logic for extracting comments and replies
 from YouTube's API responses, including continuation handling.
 """
 
+from __future__ import annotations
+
 import time
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    pass
 
 from .exceptions import APIError
 from .logging_config import get_logger
@@ -41,7 +46,7 @@ class CommentProcessor:
         post_id: str,
         max_comments: int = 100,
         max_replies_per_comment: int = 200,
-    ) -> List[Comment]:
+    ) -> list[Comment]:
         """
         Extract comments for a post using post detail API.
 
@@ -54,7 +59,7 @@ class CommentProcessor:
         Returns:
             List of Comment objects
         """
-        comments: List[Comment] = []
+        comments: list[Comment] = []
 
         try:
             logger.debug(f"Starting comment extraction for post {post_id}")
@@ -119,9 +124,7 @@ class CommentProcessor:
             logger.error(f"Error extracting comments for post {post_id}: {e}")
             return []
 
-    def _find_comment_continuation_token(
-        self, response: Dict[str, Any]
-    ) -> Optional[str]:
+    def _find_comment_continuation_token(self, response: dict[str, Any]) -> str | None:
         """
         Find the continuation token for loading comments from post detail response.
 
@@ -174,8 +177,8 @@ class CommentProcessor:
             return None
 
     def _extract_comments_from_continuation(
-        self, response: Dict[str, Any], max_replies_per_comment: int = 200
-    ) -> List[Comment]:
+        self, response: dict[str, Any], max_replies_per_comment: int = 200
+    ) -> list[Comment]:
         """
         Extract comments from a continuation response.
 
@@ -227,10 +230,10 @@ class CommentProcessor:
 
     def _process_comment_item(
         self,
-        item: Dict[str, Any],
-        entity_payloads: List[Dict[str, Any]],
+        item: dict[str, Any],
+        entity_payloads: list[dict[str, Any]],
         max_replies_per_comment: int,
-    ) -> Optional[Comment]:
+    ) -> Comment | None:
         """
         Process a single comment item from the response.
 
@@ -275,10 +278,10 @@ class CommentProcessor:
 
     def _process_new_format_comment(
         self,
-        thread_renderer: Dict[str, Any],
-        entity_payloads: List[Dict[str, Any]],
+        thread_renderer: dict[str, Any],
+        entity_payloads: list[dict[str, Any]],
         max_replies_per_comment: int,
-    ) -> Optional[Comment]:
+    ) -> Comment | None:
         """
         Process comment in new format (commentViewModel).
 
@@ -316,7 +319,7 @@ class CommentProcessor:
             comment_result = self.extractor.extract_comment_from_entity(
                 matching_entities
             )
-            comment: Optional[Comment] = comment_result
+            comment: Comment | None = comment_result
             if not comment:
                 return None
 
@@ -342,8 +345,8 @@ class CommentProcessor:
             return None
 
     def _process_old_format_comment(
-        self, thread_renderer: Dict[str, Any], max_replies_per_comment: int
-    ) -> Optional[Comment]:
+        self, thread_renderer: dict[str, Any], max_replies_per_comment: int
+    ) -> Comment | None:
         """
         Process comment in old format (comment.commentRenderer).
 
@@ -358,7 +361,7 @@ class CommentProcessor:
             comment_data = self.extractor.extract_comment_from_renderer(
                 thread_renderer["comment"]["commentRenderer"]
             )
-            comment: Optional[Comment] = comment_data
+            comment: Comment | None = comment_data
 
             if not comment:
                 return None
@@ -380,7 +383,7 @@ class CommentProcessor:
 
     def _extract_replies_from_renderer(
         self,
-        replies_renderer: Dict[str, Any],
+        replies_renderer: dict[str, Any],
         parent_comment: Comment,
         max_replies: int = 200,
     ) -> None:
@@ -423,8 +426,8 @@ class CommentProcessor:
             logger.warning(f"Error extracting replies: {e}")
 
     def _get_reply_continuation_token(
-        self, replies_renderer: Dict[str, Any]
-    ) -> Optional[str]:
+        self, replies_renderer: dict[str, Any]
+    ) -> str | None:
         """
         Get continuation token for fetching more replies.
 
@@ -494,7 +497,7 @@ class CommentProcessor:
 
     def _fetch_replies_from_continuation(
         self, continuation_token: str, max_replies: int = 200
-    ) -> List[Comment]:
+    ) -> list[Comment]:
         """
         Fetch replies using a continuation token.
 
@@ -505,8 +508,8 @@ class CommentProcessor:
         Returns:
             List of Comment objects
         """
-        replies: List[Comment] = []
-        current_token: Optional[str] = continuation_token
+        replies: list[Comment] = []
+        current_token: str | None = continuation_token
         fetch_attempts = 0
         max_attempts = 10  # Prevent infinite loops
 
@@ -564,7 +567,7 @@ class CommentProcessor:
 
         return replies[:max_replies]
 
-    def _extract_replies_from_response(self, response: Dict[str, Any]) -> List[Comment]:
+    def _extract_replies_from_response(self, response: dict[str, Any]) -> list[Comment]:
         """
         Extract replies from a continuation response.
 
@@ -634,8 +637,8 @@ class CommentProcessor:
         return replies
 
     def _find_reply_continuation_token_in_response(
-        self, response: Dict[str, Any]
-    ) -> Optional[str]:
+        self, response: dict[str, Any]
+    ) -> str | None:
         """
         Find the next continuation token specifically for replies in a response.
 
@@ -708,7 +711,7 @@ class CommentProcessor:
             logger.warning(f"Error finding reply continuation token: {e}")
             return None
 
-    def _find_continuation_token(self, response: Dict[str, Any]) -> Optional[str]:
+    def _find_continuation_token(self, response: dict[str, Any]) -> str | None:
         """
         Find the next continuation token in a response.
 

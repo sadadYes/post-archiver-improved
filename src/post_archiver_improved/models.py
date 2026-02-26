@@ -2,11 +2,13 @@
 Data models for YouTube community posts and comments.
 
 This module defines the data structures used to represent posts, comments,
-and related metadata.
+and related metadata. Uses slots=True on Python 3.10+ for memory efficiency.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -34,10 +36,10 @@ class Image:
     """Represents an image attachment."""
 
     src: str = ""
-    local_path: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    file_size: Optional[int] = None
+    local_path: str | None = None
+    width: int | None = None
+    height: int | None = None
+    file_size: int | None = None
 
 
 @dataclass
@@ -53,9 +55,9 @@ class Comment:
     is_favorited: bool = False
     is_pinned: bool = False
     reply_count: str = "0"
-    replies: List["Comment"] = field(default_factory=list)
+    replies: list[Comment] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert comment to dictionary format for JSON serialization."""
         return {
             "id": self.id,
@@ -76,7 +78,7 @@ class Comment:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Comment":
+    def from_dict(cls, data: dict[str, Any]) -> Comment:
         """Create Comment instance from dictionary."""
         author = Author(
             id=data.get("author_id", ""),
@@ -115,11 +117,11 @@ class Post:
     comments_count: str = "0"
     members_only: bool = False
     author: Author = field(default_factory=Author)
-    images: List[Image] = field(default_factory=list)
-    links: List[Link] = field(default_factory=list)
-    comments: List[Comment] = field(default_factory=list)
+    images: list[Image] = field(default_factory=list)
+    links: list[Link] = field(default_factory=list)
+    comments: list[Comment] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert post to dictionary format for JSON serialization."""
         return {
             "post_id": self.post_id,
@@ -150,7 +152,7 @@ class Post:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Post":
+    def from_dict(cls, data: dict[str, Any]) -> Post:
         """Create Post instance from dictionary."""
         author = Author(
             id=data.get("author_id", ""),
@@ -209,9 +211,9 @@ class ArchiveMetadata:
     total_comments: int = 0
     total_images: int = 0
     images_downloaded: int = 0
-    config_used: Dict[str, Any] = field(default_factory=dict)
+    config_used: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metadata to dictionary format."""
         return {
             "channel_id": self.channel_id,
@@ -230,39 +232,37 @@ class ArchiveData:
     """Complete archive data including metadata and posts."""
 
     metadata: ArchiveMetadata
-    posts: List[Post] = field(default_factory=list)
+    posts: list[Post] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert archive data to dictionary format for JSON serialization."""
+        total_comments = 0
+        total_images = 0
+        images_downloaded = 0
 
-        # Calculate statistics
-        def count_comments_recursive(comments: List[Comment]) -> int:
-            """Recursively count comments including all nested replies."""
-            total = len(comments)
-            for comment in comments:
-                total += count_comments_recursive(comment.replies)
-            return total
+        stack: list[Comment] = []
+        for post in self.posts:
+            total_images += len(post.images)
+            images_downloaded += sum(1 for img in post.images if img.local_path)
+            stack.extend(post.comments)
 
-        total_comments = sum(
-            count_comments_recursive(post.comments) for post in self.posts
-        )
-        total_images = sum(len(post.images) for post in self.posts)
-        images_downloaded = sum(
-            1 for post in self.posts for image in post.images if image.local_path
-        )
+        while stack:
+            comment = stack.pop()
+            total_comments += 1
+            stack.extend(comment.replies)
 
-        # Update metadata
-        self.metadata.total_comments = total_comments
-        self.metadata.total_images = total_images
-        self.metadata.images_downloaded = images_downloaded
+        metadata_dict = self.metadata.to_dict()
+        metadata_dict["total_comments"] = total_comments
+        metadata_dict["total_images"] = total_images
+        metadata_dict["images_downloaded"] = images_downloaded
 
         return {
-            **self.metadata.to_dict(),
+            **metadata_dict,
             "posts": [post.to_dict() for post in self.posts],
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ArchiveData":
+    def from_dict(cls, data: dict[str, Any]) -> ArchiveData:
         """Create ArchiveData instance from dictionary."""
         metadata = ArchiveMetadata(
             channel_id=data.get("channel_id", ""),

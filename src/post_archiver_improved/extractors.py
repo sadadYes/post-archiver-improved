@@ -5,8 +5,13 @@ This module contains classes responsible for extracting and parsing data
 from YouTube's API responses into structured data models.
 """
 
+from __future__ import annotations
+
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    pass
 
 from .constants import RELATIVE_TIME_INDICATORS, YOUTUBE_BASE_URL
 from .exceptions import ParseError
@@ -14,6 +19,9 @@ from .logging_config import get_logger
 from .models import Author, Comment, Image, Link, Post
 
 logger = get_logger(__name__)
+
+# Pre-compiled regex for extracting numeric values from strings
+_RE_EXTRACT_DIGITS = re.compile(r"(\d+)")
 
 
 class PostExtractor:
@@ -25,7 +33,7 @@ class PostExtractor:
     """
 
     @staticmethod
-    def extract_text_content(content_runs: List[Dict[str, Any]]) -> str:
+    def extract_text_content(content_runs: list[dict[str, Any]]) -> str:
         """
         Extract plain text content from YouTube's 'runs' format.
 
@@ -41,7 +49,7 @@ class PostExtractor:
         return "".join(run.get("text", "") for run in content_runs)
 
     @staticmethod
-    def _extract_links(content_runs: List[Dict[str, Any]]) -> List[Link]:
+    def _extract_links(content_runs: list[dict[str, Any]]) -> list[Link]:
         """
         Extract links from content runs.
 
@@ -90,7 +98,7 @@ class PostExtractor:
         return links
 
     @staticmethod
-    def _extract_author_info(post_renderer: Dict[str, Any]) -> Author:
+    def _extract_author_info(post_renderer: dict[str, Any]) -> Author:
         """
         Extract author information from post renderer.
 
@@ -162,8 +170,8 @@ class PostExtractor:
 
     @staticmethod
     def _extract_content_and_links(
-        post_renderer: Dict[str, Any],
-    ) -> Tuple[str, List[Link]]:
+        post_renderer: dict[str, Any],
+    ) -> tuple[str, list[Link]]:
         """
         Extract content text and embedded links from post renderer.
 
@@ -217,7 +225,7 @@ class PostExtractor:
         return content, links
 
     @staticmethod
-    def _extract_images(attachment: Dict[str, Any]) -> List[Image]:
+    def _extract_images(attachment: dict[str, Any]) -> list[Image]:
         """
         Extract images from attachment data.
 
@@ -296,7 +304,7 @@ class PostExtractor:
         )
 
     @staticmethod
-    def extract_post_data(post_renderer: Dict[str, Any]) -> Post:
+    def extract_post_data(post_renderer: dict[str, Any]) -> Post:
         """
         Extract post data from API response.
 
@@ -365,7 +373,7 @@ class PostExtractor:
             if "simpleText" in button_text:
                 comment_text = button_text["simpleText"]
                 # Extract number from text like "5 Comments"
-                match = re.search(r"(\d+)", comment_text)
+                match = _RE_EXTRACT_DIGITS.search(comment_text)
                 if match:
                     post.comments_count = match.group(1)
                 else:
@@ -373,7 +381,7 @@ class PostExtractor:
             elif "runs" in button_text and button_text["runs"]:
                 comment_text = button_text["runs"][0].get("text", "")
                 # Extract number from text like "5 Comments" or just "15"
-                match = re.search(r"(\d+)", comment_text)
+                match = _RE_EXTRACT_DIGITS.search(comment_text)
                 if match:
                     post.comments_count = match.group(1)
                 else:
@@ -414,7 +422,7 @@ class CommentExtractor:
         logger.debug("Comment extractor initialized")
 
     @staticmethod
-    def extract_comment(comment_data: Dict[str, Any]) -> Optional[Comment]:
+    def extract_comment(comment_data: dict[str, Any]) -> Comment | None:
         """
         Extract a single comment from comment data.
 
@@ -452,7 +460,7 @@ class CommentExtractor:
             return None
 
     @staticmethod
-    def extract_comments_from_response(response_data: Dict[str, Any]) -> List[Comment]:
+    def extract_comments_from_response(response_data: dict[str, Any]) -> list[Comment]:
         """
         Extract comments from API response data.
 
@@ -490,7 +498,7 @@ class CommentExtractor:
         return comments
 
     @staticmethod
-    def extract_replies(reply_data: List[Dict[str, Any]]) -> List[Comment]:
+    def extract_replies(reply_data: list[dict[str, Any]]) -> list[Comment]:
         """
         Extract replies from reply data.
 
@@ -526,7 +534,7 @@ class CommentExtractor:
         post_id: str,
         max_comments: int = 100,
         max_replies_per_comment: int = 200,
-    ) -> List[Comment]:
+    ) -> list[Comment]:
         """
         Extract comments for a post - delegates to CommentProcessor.
 
@@ -587,8 +595,8 @@ class CommentExtractor:
         )
 
     def extract_comment_from_entity(
-        self, entity_payloads: List[Dict[str, Any]]
-    ) -> Optional[Comment]:
+        self, entity_payloads: list[dict[str, Any]]
+    ) -> Comment | None:
         """
         Extract comment from new entity format (commentEntityPayload).
 
@@ -686,8 +694,8 @@ class CommentExtractor:
             return None
 
     def _extract_toolbar_data(
-        self, toolbar: Dict[str, Any], toolbar_entity: Optional[Dict[str, Any]]
-    ) -> Tuple[str, bool, str]:
+        self, toolbar: dict[str, Any], toolbar_entity: dict[str, Any] | None
+    ) -> tuple[str, bool, str]:
         """
         Extract like count, favorited status, and reply count from toolbar data.
 
@@ -714,7 +722,7 @@ class CommentExtractor:
 
                 reply_count_a11y = toolbar.get("replyCountA11y", "0")
                 if reply_count_a11y:
-                    match = re.search(r"(\d+)", reply_count_a11y)
+                    match = _RE_EXTRACT_DIGITS.search(reply_count_a11y)
                     reply_count = match.group(1) if match else "0"
 
             # Override with toolbar entity data if available
@@ -729,7 +737,7 @@ class CommentExtractor:
 
                 toolbar_reply_count_a11y = toolbar_entity.get("replyCountA11y", "0")
                 if toolbar_reply_count_a11y:
-                    match = re.search(r"(\d+)", toolbar_reply_count_a11y)
+                    match = _RE_EXTRACT_DIGITS.search(toolbar_reply_count_a11y)
                     toolbar_reply_count = match.group(1) if match else "0"
                     if toolbar_reply_count != "0":
                         reply_count = toolbar_reply_count
@@ -740,8 +748,8 @@ class CommentExtractor:
         return like_count, is_favorited, reply_count
 
     def extract_comment_from_renderer(
-        self, comment_renderer: Dict[str, Any]
-    ) -> Optional[Comment]:
+        self, comment_renderer: dict[str, Any]
+    ) -> Comment | None:
         """
         Extract comment from old renderer format (commentRenderer).
 
@@ -869,7 +877,7 @@ class CommentExtractor:
                             button_text = reply_button["buttonRenderer"].get("text", {})
                             if "simpleText" in button_text:
                                 text = button_text["simpleText"]
-                                match = re.search(r"(\d+)", text)
+                                match = _RE_EXTRACT_DIGITS.search(text)
                                 if match:
                                     reply_count = match.group(1)
 

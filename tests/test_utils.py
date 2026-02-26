@@ -361,13 +361,12 @@ class TestCreateBackupFilename:
         assert "backup" in backup_name.name
         assert backup_name.suffix == ".json"
 
-    @patch("datetime.datetime")
+    @patch("post_archiver_improved.utils.datetime")
     def test_multiple_backups_different_names(self, mock_datetime, temp_dir):
         """Test that multiple backups get different names."""
         original_file = temp_dir / "test.json"
         original_file.write_text("{}")
 
-        # Mock different timestamps
         mock_datetime.now.side_effect = [
             Mock(strftime=Mock(return_value="20240101_120000")),
             Mock(strftime=Mock(return_value="20240101_120001")),
@@ -385,11 +384,12 @@ class TestDownloadImage:
     @patch("post_archiver_improved.utils.urlopen")
     def test_successful_image_download(self, mock_urlopen, temp_dir):
         """Test successful image download."""
-        # Mock response
+        # Mock response with proper file-like read behavior for shutil.copyfileobj
         mock_response = Mock()
         mock_response.status = 200
         mock_response.headers = {"content-type": "image/jpeg"}
-        mock_response.read.return_value = b"fake_image_data"
+        # side_effect returns data on first call, then empty bytes to signal EOF
+        mock_response.read.side_effect = [b"fake_image_data", b""]
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
         image_url = "https://example.com/image.jpg"
@@ -409,7 +409,7 @@ class TestDownloadImage:
         mock_response = Mock()
         mock_response.status = 200
         mock_response.headers = {"content-type": "image/jpeg"}
-        mock_response.read.return_value = b"image_data"
+        mock_response.read.side_effect = [b"image_data", b""]
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
         image_url = "https://example.com/image.jpg"
@@ -419,6 +419,7 @@ class TestDownloadImage:
 
         images_dir = output_dir / "images"
         assert images_dir.exists()
+        assert result is not None
         result_path = Path(result)
         assert result_path.parent == images_dir
 
@@ -428,7 +429,7 @@ class TestDownloadImage:
         mock_response = Mock()
         mock_response.status = 200
         mock_response.headers = {"content-type": "image/jpeg"}
-        mock_response.read.return_value = b"image_data"
+        mock_response.read.side_effect = [b"image_data", b""]
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
         image_url = "https://example.com/image.jpg"
@@ -437,6 +438,7 @@ class TestDownloadImage:
 
         result = download_image(image_url, custom_filename, output_dir)
 
+        assert result is not None
         result_path = Path(result)
         assert result_path.name == custom_filename
 

@@ -5,10 +5,13 @@ This module provides the primary interface for scraping YouTube community posts,
 including comments and images, with comprehensive error handling and logging.
 """
 
+from __future__ import annotations
+
+import math
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .api import YouTubeCommunityAPI
 from .config import Config
@@ -140,13 +143,18 @@ class CommunityPostScraper:
                     continuation_token = self._find_continuation_token(contents)
 
                     remaining_posts = None
-                    if max_posts is not None and max_posts != float("inf"):
+                    if max_posts is not None and max_posts != math.inf:
                         remaining_posts = int(max_posts - len(archive_data.posts))
                     posts = self._process_posts_batch(
                         contents, resolved_channel_id, max_posts=remaining_posts
                     )
 
                     if not posts:
+                        if continuation_token:
+                            logger.debug(
+                                "No posts in this batch, following continuation token..."
+                            )
+                            continue
                         logger.info("No more posts found, stopping...")
                         break
 
@@ -181,7 +189,7 @@ class CommunityPostScraper:
             logger.error(f"Error during scraping: {e}")
             raise
 
-    def _find_community_tab(self, response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _find_community_tab(self, response: dict[str, Any]) -> dict[str, Any] | None:
         """
         Find the community/posts tab in the channel response.
 
@@ -214,8 +222,8 @@ class CommunityPostScraper:
             return None
 
     def _extract_tab_contents(
-        self, community_tab: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, community_tab: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """
         Extract contents from community tab.
 
@@ -241,8 +249,8 @@ class CommunityPostScraper:
             return []
 
     def _extract_continuation_contents(
-        self, response: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, response: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """
         Extract contents from continuation response.
 
@@ -257,25 +265,28 @@ class CommunityPostScraper:
             if not endpoints:
                 return []
 
-            endpoint = endpoints[0]
-            if "appendContinuationItemsAction" in endpoint:
-                continuation_items = endpoint["appendContinuationItemsAction"].get(
-                    "continuationItems", []
-                )
-                return continuation_items  # type: ignore
-            elif "reloadContinuationItemsCommand" in endpoint:
-                continuation_items = endpoint["reloadContinuationItemsCommand"].get(
-                    "continuationItems", []
-                )
-                return continuation_items  # type: ignore
+            # Iterate ALL endpoints — YouTube often returns multiple actions
+            # (e.g., one with posts and another with the continuation token)
+            all_items: list[dict[str, Any]] = []
+            for endpoint in endpoints:
+                if "appendContinuationItemsAction" in endpoint:
+                    items = endpoint["appendContinuationItemsAction"].get(
+                        "continuationItems", []
+                    )
+                    all_items.extend(items)
+                elif "reloadContinuationItemsCommand" in endpoint:
+                    items = endpoint["reloadContinuationItemsCommand"].get(
+                        "continuationItems", []
+                    )
+                    all_items.extend(items)
 
-            return []
+            return all_items
 
         except Exception as e:
             logger.warning(f"Error extracting continuation contents: {e}")
             return []
 
-    def _find_continuation_token(self, contents: List[Dict[str, Any]]) -> Optional[str]:
+    def _find_continuation_token(self, contents: list[dict[str, Any]]) -> str | None:
         """
         Find continuation token in content items.
 
@@ -308,10 +319,10 @@ class CommunityPostScraper:
 
     def _process_posts_batch(
         self,
-        contents: List[Dict[str, Any]],
+        contents: list[dict[str, Any]],
         channel_id: str,
-        max_posts: Optional[int] = None,
-    ) -> List[Post]:
+        max_posts: int | None = None,
+    ) -> list[Post]:
         """
         Process a batch of posts from content items.
 
@@ -418,7 +429,7 @@ class CommunityPostScraper:
             except Exception as e:
                 logger.error(f"Error downloading image {image.src}: {e}")
 
-    def _extract_post_comments(self, channel_id: str, post_id: str) -> List[Comment]:
+    def _extract_post_comments(self, channel_id: str, post_id: str) -> list[Comment]:
         """
         Extract comments for a post.
 
@@ -532,8 +543,8 @@ class CommunityPostScraper:
             raise
 
     def _extract_individual_post_from_response(
-        self, response: Dict[str, Any], post_id: str
-    ) -> Optional[Post]:
+        self, response: dict[str, Any], post_id: str
+    ) -> Post | None:
         """
         Extract post data from individual post API response.
 
@@ -585,7 +596,7 @@ class CommunityPostScraper:
             # Alternative structure for direct post responses
             if "header" in response or "metadata" in response:
                 # Try to find backstagePostRenderer in the response
-                def find_post_renderer(obj: Any) -> Optional[Dict[str, Any]]:
+                def find_post_renderer(obj: Any) -> dict[str, Any] | None:
                     if isinstance(obj, dict):
                         if "backstagePostRenderer" in obj:
                             renderer = obj["backstagePostRenderer"]
@@ -618,7 +629,7 @@ class CommunityPostScraper:
             logger.warning(f"Error extracting individual post from response: {e}")
             return None
 
-    def _get_config_summary(self) -> Dict[str, Any]:
+    def _get_config_summary(self) -> dict[str, Any]:
         """
         Get a summary of the current configuration for metadata.
 
@@ -628,7 +639,7 @@ class CommunityPostScraper:
         return {
             "max_posts": (
                 self.config.scraping.max_posts
-                if self.config.scraping.max_posts != float("inf")
+                if self.config.scraping.max_posts != math.inf
                 else "unlimited"
             ),
             "extract_comments": self.config.scraping.extract_comments,

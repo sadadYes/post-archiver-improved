@@ -5,7 +5,9 @@ This module defines specific exception types to provide better error handling
 and debugging information throughout the application.
 """
 
-from typing import Any, Dict, Optional
+from __future__ import annotations
+
+from typing import Any
 
 
 class PostArchiverError(Exception):
@@ -19,9 +21,9 @@ class PostArchiverError(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        original_error: Optional[Exception] = None,
+        error_code: str | None = None,
+        context: dict[str, Any] | None = None,
+        original_error: Exception | None = None,
     ):
         """
         Initialize the exception with additional context.
@@ -38,7 +40,7 @@ class PostArchiverError(Exception):
         self.context = context or {}
         self.original_error = original_error
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert exception to dictionary for logging/serialization.
 
@@ -78,8 +80,8 @@ class NetworkError(PostArchiverError):
     def __init__(
         self,
         message: str,
-        status_code: Optional[int] = None,
-        url: Optional[str] = None,
+        status_code: int | None = None,
+        url: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -113,8 +115,8 @@ class APIError(PostArchiverError):
     def __init__(
         self,
         message: str,
-        api_response: Optional[Dict[str, Any]] = None,
-        endpoint: Optional[str] = None,
+        api_response: dict[str, Any] | None = None,
+        endpoint: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -148,8 +150,8 @@ class ParseError(PostArchiverError):
     def __init__(
         self,
         message: str,
-        data_source: Optional[str] = None,
-        field_path: Optional[str] = None,
+        data_source: str | None = None,
+        field_path: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -182,8 +184,8 @@ class JSONParseError(ParseError):
     def __init__(
         self,
         message: str,
-        json_text: Optional[str] = None,
-        position: Optional[int] = None,
+        json_text: str | None = None,
+        position: int | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -220,9 +222,9 @@ class ValidationError(PostArchiverError):
     def __init__(
         self,
         message: str,
-        field_name: Optional[str] = None,
-        field_value: Optional[Any] = None,
-        expected_format: Optional[str] = None,
+        field_name: str | None = None,
+        field_value: Any | None = None,
+        expected_format: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -260,8 +262,8 @@ class ConfigurationError(PostArchiverError):
     def __init__(
         self,
         message: str,
-        config_file: Optional[str] = None,
-        config_key: Optional[str] = None,
+        config_file: str | None = None,
+        config_key: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -295,8 +297,8 @@ class FileOperationError(PostArchiverError):
     def __init__(
         self,
         message: str,
-        file_path: Optional[str] = None,
-        operation: Optional[str] = None,
+        file_path: str | None = None,
+        operation: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -329,8 +331,8 @@ class RateLimitError(NetworkError):
     def __init__(
         self,
         message: str,
-        retry_after: Optional[int] = None,
-        limit_type: Optional[str] = None,
+        retry_after: int | None = None,
+        limit_type: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -361,7 +363,7 @@ class TimeoutError(NetworkError):
     """
 
     def __init__(
-        self, message: str, timeout_duration: Optional[float] = None, **kwargs: Any
+        self, message: str, timeout_duration: float | None = None, **kwargs: Any
     ) -> None:
         """
         Initialize timeout error with timeout context.
@@ -387,7 +389,7 @@ class ChannelNotFoundError(APIError):
     """
 
     def __init__(
-        self, message: str, channel_id: Optional[str] = None, **kwargs: Any
+        self, message: str, channel_id: str | None = None, **kwargs: Any
     ) -> None:
         """
         Initialize channel not found error with channel context.
@@ -417,8 +419,8 @@ class CommentExtractionError(ParseError):
     def __init__(
         self,
         message: str,
-        post_id: Optional[str] = None,
-        comment_id: Optional[str] = None,
+        post_id: str | None = None,
+        comment_id: str | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -451,8 +453,8 @@ class ImageDownloadError(FileOperationError):
     def __init__(
         self,
         message: str,
-        image_url: Optional[str] = None,
-        image_size: Optional[int] = None,
+        image_url: str | None = None,
+        image_size: int | None = None,
         **kwargs: Any,
     ) -> None:
         """

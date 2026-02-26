@@ -5,10 +5,12 @@ This module provides functions for saving archive data in various formats
 with proper error handling and backup creation.
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .config import OutputConfig
 from .exceptions import FileOperationError
@@ -38,7 +40,7 @@ class OutputManager:
         logger.debug("Output manager initialized")
 
     def save_archive_data(
-        self, archive_data: ArchiveData, output_path: Optional[Path] = None
+        self, archive_data: ArchiveData, output_path: Path | None = None
     ) -> Path:
         """
         Save archive data to a file.
@@ -98,7 +100,9 @@ class OutputManager:
         Returns:
             Generated file path
         """
-        output_dir = self.config.output_dir or Path.cwd()
+        output_dir = (
+            Path(self.config.output_dir) if self.config.output_dir else Path.cwd()
+        )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Handle individual post filename differently
@@ -230,8 +234,8 @@ class OutputManager:
             return "Unknown"
 
     def save_summary_report(
-        self, archive_data: ArchiveData, output_dir: Optional[Path] = None
-    ) -> Optional[Path]:
+        self, archive_data: ArchiveData, output_dir: Path | str | None = None
+    ) -> Path | None:
         """
         Save summary report to a text file.
 
@@ -243,14 +247,23 @@ class OutputManager:
             Path to saved report file or None if saving fails
         """
         try:
-            if not output_dir:
-                output_dir = self.config.output_dir or Path.cwd()
+            resolved_dir: Path
+            if output_dir is None:
+                resolved_dir = (
+                    Path(self.config.output_dir)
+                    if self.config.output_dir
+                    else Path.cwd()
+                )
+            elif isinstance(output_dir, str):
+                resolved_dir = Path(output_dir)
+            else:
+                resolved_dir = output_dir
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             report_filename = (
                 f"summary_{archive_data.metadata.channel_id}_{timestamp}.txt"
             )
-            report_path = output_dir / report_filename
+            report_path = resolved_dir / report_filename
 
             report_content = self.create_summary_report(archive_data)
 
@@ -267,7 +280,7 @@ class OutputManager:
 
 def save_posts(
     archive_data: ArchiveData,
-    output_dir: Optional[Path] = None,
+    output_dir: Path | None = None,
     create_summary: bool = True,
 ) -> Path:
     """
