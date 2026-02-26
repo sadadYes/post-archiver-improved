@@ -13,8 +13,8 @@ import re
 from typing import Any
 
 from .constants import (
-    COMMUNITY_TAB_PARAMS,
     DEFAULT_USER_AGENT,
+    POSTS_TAB_PARAMS,
     YOUTUBE_BASE_URL,
     YOUTUBE_BROWSE_ENDPOINT,
     YOUTUBE_CLIENT_VERSION,
@@ -26,10 +26,12 @@ from .utils import make_http_request
 
 logger = get_logger(__name__)
 
-# Pre-compiled regex patterns for extracting channel IDs from HTML responses
+# Pre-compiled regex patterns for extracting channel IDs from HTML responses.
+# Order matters: canonical/authoritative sources first, then fallback patterns.
+# YouTube pages for Official Artist Channels (OAC) may contain multiple channel IDs
+# (sub-channels, topic channels, etc.). The canonical URL and externalId always
+# point to the primary channel, so they must be checked before generic patterns.
 _CHANNEL_ID_PATTERNS = [
-    re.compile(r'"channelId":"(UC[a-zA-Z0-9_-]{22})"'),
-    re.compile(r'"browseId":"(UC[a-zA-Z0-9_-]{22})"'),
     re.compile(
         r'<link[^>]*rel="canonical"[^>]*href="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"'
     ),
@@ -37,6 +39,8 @@ _CHANNEL_ID_PATTERNS = [
         r'<meta[^>]*property="og:url"[^>]*content="[^"]*channel\/(UC[a-zA-Z0-9_-]{22})"'
     ),
     re.compile(r'"externalId":"(UC[a-zA-Z0-9_-]{22})"'),
+    re.compile(r'"browseId":"(UC[a-zA-Z0-9_-]{22})"'),
+    re.compile(r'"channelId":"(UC[a-zA-Z0-9_-]{22})"'),
 ]
 
 # Module-level cache for resolved channel handles
@@ -248,7 +252,7 @@ class YouTubeCommunityAPI:
         payload = {
             "context": self.client_context,
             "browseId": browse_id,
-            "params": COMMUNITY_TAB_PARAMS,  # Base64 encoded parameters for community tab
+            "params": POSTS_TAB_PARAMS,
         }
 
         try:
@@ -355,23 +359,41 @@ class YouTubeCommunityAPI:
             channel_bytes = channel_id.encode("utf-8")
             post_bytes = post_id.encode("utf-8")
 
-            # YouTube internal API protobuf-like parameter structure:
-            # \xc2\x03 - Message type identifier for post detail request
-            # Z\x12 - Field delimiter + length prefix marker
-            # <len><channel_bytes> - Channel ID with length prefix
-            # \x1a - Field separator for post ID
-            # <len><post_bytes> - Post ID with length prefix
-            # Z<len><channel_bytes> - Repeated channel ID for context
-            params_data = (
-                b"\xc2\x03Z\x12"
+            # Protobuf structure (from YouTube.js CommunityPostParams):
+            # message CommunityPostParams {
+            #   message Field1 {
+            #     string ucid1 = 2;    // channel_id
+            #     string post_id = 3;  // post_id
+            #     string ucid2 = 11;   // channel_id (repeated)
+            #   }
+            #   Field1 f1 = 56;
+            # }
+            #
+            # Wire format:
+            #   \xc2\x03 = field 56, wire type 2 (length-delimited)
+            #   <varint>  = length of inner message
+            #   \x12      = field 2, wire type 2 (ucid1)
+            #   \x1a      = field 3, wire type 2 (post_id)
+            #   \x5a      = field 11, wire type 2 (ucid2)
+
+            # Build inner message (Field1)
+            inner_message = (
+                b"\x12"  # field 2 tag (ucid1)
                 + bytes([len(channel_bytes)])
                 + channel_bytes
-                + b"\x1a"
+                + b"\x1a"  # field 3 tag (post_id)
                 + bytes([len(post_bytes)])
                 + post_bytes
-                + b"Z"
+                + b"\x5a"  # field 11 tag (ucid2)
                 + bytes([len(channel_bytes)])
                 + channel_bytes
+            )
+
+            # Build outer message with correct length
+            params_data = (
+                b"\xc2\x03"  # field 56 tag
+                + bytes([len(inner_message)])  # varint length of inner msg
+                + inner_message
             )
 
             params = base64.b64encode(params_data).decode("ascii")

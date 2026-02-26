@@ -265,19 +265,22 @@ class CommunityPostScraper:
             if not endpoints:
                 return []
 
-            endpoint = endpoints[0]
-            if "appendContinuationItemsAction" in endpoint:
-                continuation_items = endpoint["appendContinuationItemsAction"].get(
-                    "continuationItems", []
-                )
-                return continuation_items  # type: ignore
-            elif "reloadContinuationItemsCommand" in endpoint:
-                continuation_items = endpoint["reloadContinuationItemsCommand"].get(
-                    "continuationItems", []
-                )
-                return continuation_items  # type: ignore
+            # Iterate ALL endpoints — YouTube often returns multiple actions
+            # (e.g., one with posts and another with the continuation token)
+            all_items: list[dict[str, Any]] = []
+            for endpoint in endpoints:
+                if "appendContinuationItemsAction" in endpoint:
+                    items = endpoint["appendContinuationItemsAction"].get(
+                        "continuationItems", []
+                    )
+                    all_items.extend(items)
+                elif "reloadContinuationItemsCommand" in endpoint:
+                    items = endpoint["reloadContinuationItemsCommand"].get(
+                        "continuationItems", []
+                    )
+                    all_items.extend(items)
 
-            return []
+            return all_items
 
         except Exception as e:
             logger.warning(f"Error extracting continuation contents: {e}")

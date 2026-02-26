@@ -14,8 +14,8 @@ YOUTUBE_NEXT_ENDPOINT = f"{YOUTUBE_API_BASE_URL}/next"
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 YOUTUBE_CLIENT_VERSION = "2.20241113.07.00"
 
-# Community tab parameters
-COMMUNITY_TAB_PARAMS = "Egljb21tdW5pdHnyBgQKAkoA"
+# Posts tab parameters (URL-safe base64 encoded protobuf: \x12\x05posts\xf2\x06\x04\x0a\x02\x4a\x00)
+POSTS_TAB_PARAMS = "EgVwb3N0c_IGBAoCSgA="
 
 # Default configuration values
 DEFAULT_TIMEOUT = 30
